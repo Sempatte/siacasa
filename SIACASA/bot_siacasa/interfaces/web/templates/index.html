@@ -1,0 +1,69 @@
+<!-- bot_siacasa/interfaces/web/templates/index.html -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SIACASA - Asistente Bancario Virtual</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome para iconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <!-- Estilos propios -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="chat-container">
+            <div class="chat-header">
+                <i class="fas fa-robot fa-2x me-2"></i>
+                <div>
+                    <h4 class="mb-0">SIACASA</h4>
+                    <small>Asistente Bancario Virtual</small>
+                </div>
+            </div>
+            
+            <div class="chat-messages" id="chatMessages">
+                <!-- Aquí se cargarán los mensajes -->
+                <div class="message bot-message">
+                    <div class="message-content">
+                        <div>Hola, soy SIACASA, tu asistente bancario virtual. ¿En qué puedo ayudarte hoy?</div>
+                        <div class="message-time">Ahora</div>
+                    </div>
+                </div>
+                
+                <div class="typing-indicator bot-message" id="typingIndicator">
+                    <div class="message-content d-flex align-items-center">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chat-input">
+                <input type="text" id="userInput" placeholder="Escribe tu mensaje aquí..." class="form-control">
+                <button class="btn btn-primary" id="sendButton">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+            
+            <div class="controls">
+                <button class="btn btn-sm btn-reset" id="resetButton">
+                    <i class="fas fa-redo-alt me-1"></i> Reiniciar conversación
+                </button>
+                <span class="text-muted small">Desarrollado para la tesis SIACASA</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Scripts propios -->
+    <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+</body>
+</html>
