@@ -1,4 +1,5 @@
 venv/
+SIACASA/venv/
 # Archivos de ambiente
 .env
 .env.*
