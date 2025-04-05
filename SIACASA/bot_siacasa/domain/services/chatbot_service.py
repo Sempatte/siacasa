@@ -11,34 +11,40 @@ from bot_siacasa.application.interfaces.repository_interface import IRepository
 
 # Evitar importación circular
 if TYPE_CHECKING:
-    from bot_siacasa.application.use_cases.analizar_sentimiento_use_case import AnalizarSentimientoUseCase
+    from bot_siacasa.application.use_cases.analizar_sentimiento_use_case import (
+        AnalizarSentimientoUseCase,
+    )
 
 logger = logging.getLogger(__name__)
+
 
 class ChatbotService:
     """
     Servicio principal del chatbot que implementa la lógica de negocio.
     """
-    
-    def __init__(self, repository: IRepository, sentimiento_analyzer):
+
+    def __init__(
+        self, repository: IRepository, sentimiento_analyzer, web_search_provider=None
+    ):
         """
         Inicializa el servicio del chatbot.
-        
+
         Args:
             repository: Repositorio para almacenar datos
             sentimiento_analyzer: Analizador de sentimientos
         """
         self.repository = repository
         self.sentimiento_analyzer = sentimiento_analyzer
-        
+        self.web_search_provider = web_search_provider
+
         # Mensaje de sistema que define el comportamiento del chatbot
         self.mensaje_sistema = Mensaje(
             role="system",
             content="""
-            Eres SIACASA, un asistente bancario virtual diseñado para brindar atención al cliente 
-            en el sector bancario peruano. Tu objetivo es proporcionar respuestas precisas, 
+            Eres SIACASA, un asistente bancario virtual diseñado para brindar atención al cliente
+            en el sector bancario peruano. Tu objetivo es proporcionar respuestas precisas,
             eficientes y empáticas a las consultas de los clientes.
-            
+
             - Debes ser amable, respetuoso y profesional en todo momento.
             - Adapta tu tono según el estado emocional del cliente.
             - Proporciona información clara sobre productos y servicios bancarios.
@@ -46,22 +52,22 @@ class ChatbotService:
             - Si no puedes resolver una consulta, ofrece derivar al cliente con un agente humano.
             - Respeta la privacidad y seguridad de los datos del cliente.
             - Utiliza un lenguaje sencillo evitando tecnicismos cuando sea posible.
-            """
+            """,
         )
-    
+
     def obtener_o_crear_conversacion(self, usuario_id: str) -> Conversacion:
         """
         Obtiene una conversación existente o crea una nueva.
-        
+
         Args:
             usuario_id: ID del usuario
-            
+
         Returns:
             Conversación activa
         """
         # Intentar obtener una conversación existente
         conversacion = self.repository.obtener_conversacion_activa(usuario_id)
-        
+
         # Si no existe, crear una nueva
         if not conversacion:
             # Obtener o crear usuario
@@ -69,87 +75,87 @@ class ChatbotService:
             if not usuario:
                 usuario = Usuario(id=usuario_id)
                 self.repository.guardar_usuario(usuario)
-            
+
             # Crear nueva conversación
             conversacion_id = str(uuid.uuid4())
             conversacion = Conversacion(id=conversacion_id, usuario=usuario)
-            
+
             # Agregar mensaje del sistema
             conversacion.agregar_mensaje(self.mensaje_sistema)
-            
+
             # Guardar la conversación
             self.repository.guardar_conversacion(conversacion)
-        
+
         return conversacion
-    
+
     def agregar_mensaje_usuario(self, usuario_id: str, texto: str) -> Mensaje:
         """
         Agrega un mensaje del usuario a la conversación.
-        
+
         Args:
             usuario_id: ID del usuario
             texto: Texto del mensaje
-            
+
         Returns:
             Mensaje creado
         """
         conversacion = self.obtener_o_crear_conversacion(usuario_id)
-        
+
         # Crear mensaje
         mensaje = Mensaje(role="user", content=texto)
-        
+
         # Agregar a la conversación
         conversacion.agregar_mensaje(mensaje)
-        
+
         # Limitar historial para evitar tokens excesivos
         conversacion.limitar_historial(max_mensajes=20)
-        
+
         # Guardar la conversación actualizada
         self.repository.guardar_conversacion(conversacion)
-        
+
         return mensaje
-    
+
     def agregar_mensaje_asistente(self, usuario_id: str, texto: str) -> Mensaje:
         """
         Agrega un mensaje del asistente a la conversación.
-        
+
         Args:
             usuario_id: ID del usuario
             texto: Texto del mensaje
-            
+
         Returns:
             Mensaje creado
         """
         conversacion = self.obtener_o_crear_conversacion(usuario_id)
-        
+
         # Crear mensaje
         mensaje = Mensaje(role="assistant", content=texto)
-        
+
         # Agregar a la conversación
         conversacion.agregar_mensaje(mensaje)
-        
+
         # Guardar la conversación actualizada
         self.repository.guardar_conversacion(conversacion)
-        
+
         return mensaje
-    
+
     def obtener_historial_mensajes(self, usuario_id: str) -> List[Dict[str, str]]:
         """
         Obtiene el historial de mensajes de la conversación en formato para OpenAI.
-        
+
         Args:
             usuario_id: ID del usuario
-            
+
         Returns:
             Lista de mensajes en formato para la API de OpenAI
         """
         conversacion = self.obtener_o_crear_conversacion(usuario_id)
         return conversacion.obtener_historial()
-    
+
     def actualizar_datos_usuario(self, usuario_id: str, datos: Dict) -> None:
         """
         Actualiza los datos del usuario.
-        
+
         Args:
             usuario_id: ID del usuario
             datos: Datos a actualizar
@@ -158,15 +164,43 @@ class ChatbotService:
         if usuario:
             usuario.datos.update(datos)
             self.repository.guardar_usuario(usuario)
-    
+
     def analizar_sentimiento_mensaje(self, texto: str) -> AnalisisSentimiento:
         """
         Analiza el sentimiento de un mensaje.
-        
+
         Args:
             texto: Texto a analizar
-            
+
         Returns:
             Análisis de sentimiento
         """
         return self.sentimiento_analyzer.execute(texto)
+
+    def buscar_informacion_web(self, consulta: str) -> str:
+        """
+        Busca información en internet.
+
+        Args:
+            consulta: Consulta de búsqueda
+
+        Returns:
+            Texto con la información encontrada o mensaje de error
+        """
+        if not self.web_search_provider:
+            return "Lo siento, no tengo acceso a información actualizada de internet en este momento."
+        try:
+            resultados = self.web_search_provider.search(consulta)
+            if not resultados: 
+                return "No se encontraron resultados relevantes."
+            respuesta = "He encontrado esta información:\n\n"
+            for i, resultado in enumerate(resultados):
+                respuesta += f"{i+1}. {resultado['title']}\n"
+                respuesta += f"   {resultado['snippet']}\n"
+                respuesta += f"   URL: {resultado['url']}\n\n"
+            return respuesta
+        except Exception as e:
+            logger.error(f"Error al buscar información web: {e}")
+            return "Lo siento, ocurrió un error al buscar información en internet."
+      
+    

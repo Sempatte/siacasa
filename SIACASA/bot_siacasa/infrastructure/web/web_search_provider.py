@@ -47,6 +47,8 @@ class WebSearchProvider:
             response = requests.get(url, headers=headers, params=params)
             response.raise_for_status()
             
+            with open('search_response.html', 'w', encoding='utf-8') as f:
+                f.write(response.text)
             # Parsear los resultados
             soup = BeautifulSoup(response.text, 'html.parser')
             results = []

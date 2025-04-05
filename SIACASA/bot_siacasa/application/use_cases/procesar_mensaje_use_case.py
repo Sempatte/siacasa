@@ -64,6 +64,21 @@ class ProcesarMensajeUseCase:
             Si está satisfecho, mantén un tono positivo y cordial.
             """
             
+            # Verificar si el usuario está solicitando información actualizada
+            if self._requiere_informacion_web(mensaje_usuario):
+                try:
+                    # Extraer la consulta de búsqueda
+                    consulta = self._extraer_consulta_busqueda(mensaje_usuario)
+                    
+                    # Buscar información en internet
+                    info_web = self.chatbot_service.buscar_informacion_web(consulta)
+                    
+                    # Agregar la información al contexto para generar una mejor respuesta
+                    instrucciones_adicionales += f"\n\nInformación de internet sobre '{consulta}':\n{info_web}\n\nUtiliza esta información para elaborar tu respuesta."
+                    
+                except Exception as e:
+                    logger.error(f"Error al procesar búsqueda web: {e}")
+            
             # Obtener el historial de mensajes
             mensajes = self.chatbot_service.obtener_historial_mensajes(usuario_id)
             
@@ -81,3 +96,43 @@ class ProcesarMensajeUseCase:
         except Exception as e:
             logger.error(f"Error al procesar mensaje: {e}")
             return "Lo siento, ocurrió un error al procesar tu mensaje. Por favor, inténtalo de nuevo."
+    
+    def _requiere_informacion_web(self, mensaje: str) -> bool:
+        try:
+            # Palabras clave que sugieren necesidad de información actualizada
+            palabras_clave = [
+                "actualizado", "reciente", "última", "últimas", "nuevas", 
+                "noticias", "información actual", "datos recientes", 
+                "busca", "encuentra", "investiga", "buscar en internet"
+            ]
+            
+            # Convertir el mensaje a minúsculas
+            mensaje_lower = mensaje.lower()
+            logger.debug(f"Mensaje convertido a minúsculas: {mensaje_lower}")
+            
+            # Verificar si contiene alguna palabra clave
+            for palabra in palabras_clave:
+                if palabra in mensaje_lower:
+                    logger.debug(f"Requiere busqueda.")
+                    logger.debug(f"Palabra clave encontrada: {palabra}")
+                    return True
+            
+            logger.debug("No requiere búsqueda web.")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error en _requiere_informacion_web: {e}")
+            return False
+    
+    def _extraer_consulta_busqueda(self, mensaje: str) -> str:
+        """
+        Extrae la consulta de búsqueda del mensaje del usuario.
+        
+        Args:
+            mensaje: Mensaje del usuario
+            
+        Returns:
+            Consulta de búsqueda
+        """
+        # Esta es una implementación simple. Podrías usar NLP para una extracción más precisa
+        return mensaje

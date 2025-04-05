@@ -19,6 +19,7 @@ from bot_siacasa.application.use_cases.procesar_mensaje_use_case import Procesar
 from bot_siacasa.application.use_cases.analizar_sentimiento_use_case import AnalizarSentimientoUseCase
 from bot_siacasa.interfaces.cli.cli_app import CLIApp
 from bot_siacasa.interfaces.web.web_app import WebApp
+from bot_siacasa.infrastructure.web.web_search_provider import WebSearchProvider
 
 def main():
     """Función principal que inicia la aplicación."""
@@ -36,14 +37,15 @@ def main():
     # Configurar componentes (inyección de dependencias)
     ai_provider = OpenAIProvider(api_key=openai_api_key)
     repository = MemoryRepository()
-    
+    web_search_provider = WebSearchProvider()  # Añadir esta línea
     # Configurar casos de uso
     analizar_sentimiento_use_case = AnalizarSentimientoUseCase(ai_provider)
     
     # Configurar servicio del chatbot
     chatbot_service = ChatbotService(
         repository=repository,
-        sentimiento_analyzer=analizar_sentimiento_use_case
+        sentimiento_analyzer=analizar_sentimiento_use_case,
+        web_search_provider=web_search_provider
     )
     
     # Configurar caso de uso principal
