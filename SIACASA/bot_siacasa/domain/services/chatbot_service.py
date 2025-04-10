@@ -23,8 +23,9 @@ class ChatbotService:
     Servicio principal del chatbot que implementa la lógica de negocio.
     """
 
+   # Modificación para el constructor de ChatbotService
     def __init__(
-        self, repository: IRepository, sentimiento_analyzer, web_search_provider=None
+        self, repository: IRepository, sentimiento_analyzer, ai_provider=None, bank_config=None
     ):
         """
         Inicializa el servicio del chatbot.
@@ -32,28 +33,43 @@ class ChatbotService:
         Args:
             repository: Repositorio para almacenar datos
             sentimiento_analyzer: Analizador de sentimientos
+            ai_provider: Proveedor de IA para generar respuestas
+            bank_config: Configuración específica del banco
         """
         self.repository = repository
         self.sentimiento_analyzer = sentimiento_analyzer
-        self.web_search_provider = web_search_provider
-
+        self.ai_provider = ai_provider  # Añadimos el proveedor de IA
+        default_config = {
+                "bank_name": "Banco",
+                "greeting": "Hola, soy SIACASA, tu asistente bancario virtual.",
+                "style": "formal"
+            }
+        self.bank_config = {**default_config, **(bank_config or {})}
         # Mensaje de sistema que define el comportamiento del chatbot
         self.mensaje_sistema = Mensaje(
             role="system",
-            content="""
-            Eres SIACASA, un asistente bancario virtual diseñado para brindar atención al cliente
-            en el sector bancario peruano. Tu objetivo es proporcionar respuestas precisas,
+            content=f"""
+            Eres SIACASA, un asistente bancario virtual diseñado para brindar atención al cliente 
+            del {self.bank_config['bank_name']}. Tu objetivo es proporcionar respuestas precisas, 
             eficientes y empáticas a las consultas de los clientes.
-
+            
+            - Identifícate como asistente virtual del {self.bank_config['bank_name']}.
             - Debes ser amable, respetuoso y profesional en todo momento.
             - Adapta tu tono según el estado emocional del cliente.
             - Proporciona información clara sobre productos y servicios bancarios.
             - Ayuda a resolver problemas comunes como consultas de saldo, transferencias, etc.
             - Si no puedes resolver una consulta, ofrece derivar al cliente con un agente humano.
-            - Respeta la privacidad y seguridad de los datos del cliente.
+            - Recuerda los ultimos mensajes de la conversación para mantener el contexto.
+            - Si el cliente está molesto o frustrado, muestra empatía y ofrece soluciones.
+            - Si el cliente está satisfecho, agradece su confianza y ofrécele más ayuda.
+            - Si el cliente está confundido, sé claro y didáctico en tus explicaciones.
+            - No vuelvas a saludar al cliente en cada respuesta.
+            - No uses jerga técnica o términos complicados.
             - Utiliza un lenguaje sencillo evitando tecnicismos cuando sea posible.
-            """,
+            """
         )
+
+        
 
     def obtener_o_crear_conversacion(self, usuario_id: str) -> Conversacion:
         """
@@ -138,6 +154,29 @@ class ChatbotService:
         self.repository.guardar_conversacion(conversacion)
 
         return mensaje
+    
+    # Nuevo método en ChatbotService
+    def obtener_resumen_conversacion(self, usuario_id: str) -> str:
+        """Genera un resumen de la conversación para mantener contexto."""
+        conversacion = self.obtener_o_crear_conversacion(usuario_id)
+        # Si hay pocos mensajes, no es necesario resumir
+        if len(conversacion.mensajes) < 15:
+            return ""
+        
+        # Solicitar un resumen a la IA
+        mensajes_para_resumir = conversacion.mensajes[-15:]  # Últimos 15 mensajes
+        mensajes_formateados = [f"{m.role}: {m.content}" for m in mensajes_para_resumir]
+        
+        instruccion = "Resume brevemente los siguientes intercambios de la conversación manteniendo los puntos clave:"
+        contenido = "\n".join(mensajes_formateados)
+        
+        mensajes_resumen = [
+            {"role": "system", "content": instruccion},
+            {"role": "user", "content": contenido}
+        ]
+        
+        respuesta = self.ai_provider.generar_respuesta(mensajes_resumen)
+        return respuesta
 
     def obtener_historial_mensajes(self, usuario_id: str) -> List[Dict[str, str]]:
         """
@@ -177,30 +216,5 @@ class ChatbotService:
         """
         return self.sentimiento_analyzer.execute(texto)
 
-    def buscar_informacion_web(self, consulta: str) -> str:
-        """
-        Busca información en internet.
-
-        Args:
-            consulta: Consulta de búsqueda
-
-        Returns:
-            Texto con la información encontrada o mensaje de error
-        """
-        if not self.web_search_provider:
-            return "Lo siento, no tengo acceso a información actualizada de internet en este momento."
-        try:
-            resultados = self.web_search_provider.search(consulta)
-            if not resultados: 
-                return "No se encontraron resultados relevantes."
-            respuesta = "He encontrado esta información:\n\n"
-            for i, resultado in enumerate(resultados):
-                respuesta += f"{i+1}. {resultado['title']}\n"
-                respuesta += f"   {resultado['snippet']}\n"
-                respuesta += f"   URL: {resultado['url']}\n\n"
-            return respuesta
-        except Exception as e:
-            logger.error(f"Error al buscar información web: {e}")
-            return "Lo siento, ocurrió un error al buscar información en internet."
       
     

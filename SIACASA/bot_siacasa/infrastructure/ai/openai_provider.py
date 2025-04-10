@@ -69,23 +69,66 @@ class OpenAIProvider(IAProviderInterface):
             Texto de la respuesta generada
         """
         try:
-            # Copiar los mensajes para no modificar el original
-            mensajes_completos = mensajes.copy()
+            # CAMBIO 1: Validar que los mensajes tengan el formato correcto
+            mensajes_validados = []
+            for msg in mensajes:
+                if not isinstance(msg, dict) or 'role' not in msg or 'content' not in msg:
+                    logger.warning(f"Mensaje con formato incorrecto ignorado: {msg}")
+                    continue
+                
+                # Asegurar que el rol sea válido
+                if msg['role'] not in ["system", "user", "assistant"]:
+                    logger.warning(f"Mensaje con rol inválido ignorado: {msg['role']}")
+                    continue
+                    
+                mensajes_validados.append(msg)
             
-            # Agregar instrucciones adicionales si se proporcionan
+            # Si no hay mensajes válidos, crear uno de sistema básico
+            if not mensajes_validados:
+                logger.warning("No se encontraron mensajes válidos, usando mensaje de sistema por defecto")
+                mensajes_validados = [{
+                    "role": "system",
+                    "content": "Eres un asistente bancario virtual. Por favor, ayuda al usuario."
+                }]
+            
+            # CAMBIO 2: Mejorar la gestión de instrucciones adicionales
             if instrucciones_adicionales:
-                mensajes_completos.append({"role": "system", "content": instrucciones_adicionales})
+                # Buscar si ya existe un mensaje de sistema
+                sistema_existente = False
+                for msg in mensajes_validados:
+                    if msg['role'] == 'system':
+                        # Actualizar el contenido del mensaje de sistema existente
+                        # concatenando las instrucciones adicionales
+                        msg['content'] += "\n\n" + instrucciones_adicionales
+                        sistema_existente = True
+                        break
+                
+                # Si no hay mensaje de sistema, agregar uno nuevo
+                if not sistema_existente:
+                    mensajes_validados.insert(0, {
+                        "role": "system",
+                        "content": instrucciones_adicionales
+                    })
             
-            # Generar respuesta con el modelo
+            # CAMBIO 3: Mejorar el logging
+            logger.info(f"Enviando {len(mensajes_validados)} mensajes a OpenAI:")
+            for i, msg in enumerate(mensajes_validados[:3]):  # Solo los primeros 3 para el log
+                role = msg['role']
+                content_preview = msg['content'][:50] + "..." if len(msg['content']) > 50 else msg['content']
+                logger.info(f"  Mensaje #{i}: {role} - {content_preview}")
+            
+            # CAMBIO 4: Ajustar parámetros para mejor contexto
             response = openai.chat.completions.create(
                 model=self.model,
-                messages=mensajes_completos,
-                max_tokens=500,
-                temperature=0.7
+                messages=mensajes_validados,
+                max_tokens=800,
+                temperature=0.7,
+                presence_penalty=0.8,  # Aumentado para dar más importancia al contexto
+                frequency_penalty=0.5   # Añadido para evitar repeticiones
             )
             
             # Extraer el texto de la respuesta
             return response.choices[0].message.content
         except Exception as e:
-            logger.error(f"Error al generar respuesta: {e}")
-            return "Lo siento, estoy experimentando problemas técnicos en este momento. ¿Podrías intentarlo de nuevo más tarde o contactar con nuestro servicio de atención al cliente?"
+            logger.error(f"Error al generar respuesta: {e}", exc_info=True)
+            return "Lo siento, estoy experimentando problemas técnicos en este momento. ¿Podrías intentarlo de nuevo más tarde?"

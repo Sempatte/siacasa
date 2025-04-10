@@ -1,69 +1,96 @@
-#!/usr/bin/env python3
-"""
-Punto de entrada principal para el sistema SIACASA.
-Este archivo configura la inyección de dependencias e inicia la aplicación.
-"""
+# app.py o main.py - Punto de entrada principal de la aplicación
+
 import os
-import sys
+import logging
 from dotenv import load_dotenv
+
+# Configurar logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('chatbot.log')
+    ]
+)
+
+logger = logging.getLogger(__name__)
 
 # Cargar variables de entorno
 load_dotenv()
 
-# Importar componentes
-from bot_siacasa.infrastructure.logging.logger_config import configure_logger
-from bot_siacasa.infrastructure.ai.openai_provider import OpenAIProvider
-from bot_siacasa.infrastructure.repositories.memory_repository import MemoryRepository
+# Importar componentes necesarios
 from bot_siacasa.domain.services.chatbot_service import ChatbotService
-from bot_siacasa.application.use_cases.procesar_mensaje_use_case import ProcesarMensajeUseCase
+from bot_siacasa.infrastructure.repositories.memory_repository import MemoryRepository
+from bot_siacasa.infrastructure.ai.openai_provider import OpenAIProvider
 from bot_siacasa.application.use_cases.analizar_sentimiento_use_case import AnalizarSentimientoUseCase
-from bot_siacasa.interfaces.cli.cli_app import CLIApp
+from bot_siacasa.application.use_cases.procesar_mensaje_use_case import ProcesarMensajeUseCase
+from bot_siacasa.domain.banks_config import BANK_CONFIGS
 from bot_siacasa.interfaces.web.web_app import WebApp
-from bot_siacasa.infrastructure.web.web_search_provider import WebSearchProvider
+from bot_siacasa.domain.entities.analisis_sentimiento import AnalisisSentimiento
 
 def main():
-    """Función principal que inicia la aplicación."""
-    
-    # Configurar logger
-    logger = configure_logger()
-    logger.info("Iniciando SIACASA...")
-    
-    # Verificar API key
-    openai_api_key = os.getenv("OPENAI_API_KEY")
-    if not openai_api_key:
-        logger.error("No se encontró la API key de OpenAI. Configura la variable OPENAI_API_KEY en el archivo .env")
-        sys.exit(1)
-    
-    # Configurar componentes (inyección de dependencias)
-    ai_provider = OpenAIProvider(api_key=openai_api_key)
-    repository = MemoryRepository()
-    web_search_provider = WebSearchProvider()  # Añadir esta línea
-    # Configurar casos de uso
-    analizar_sentimiento_use_case = AnalizarSentimientoUseCase(ai_provider)
-    
-    # Configurar servicio del chatbot
-    chatbot_service = ChatbotService(
-        repository=repository,
-        sentimiento_analyzer=analizar_sentimiento_use_case,
-        web_search_provider=web_search_provider
-    )
-    
-    # Configurar caso de uso principal
-    procesar_mensaje_use_case = ProcesarMensajeUseCase(
-        chatbot_service=chatbot_service,
-        ai_provider=ai_provider
-    )
-    
-    # Determinar modo de ejecución
-    if len(sys.argv) > 1 and sys.argv[1] == "--consola":
-        # Modo consola
-        app = CLIApp(procesar_mensaje_use_case)
-        app.run()
-    else:
-        # Modo web (por defecto)
-        puerto = int(os.environ.get('PORT', 5000))
-        app = WebApp(procesar_mensaje_use_case)
-        app.run(host='0.0.0.0', port=puerto, debug=True)
+    """Función principal para iniciar la aplicación."""
+    try:
+        logger.info("Iniciando aplicación SIACASA")
+        
+        # Obtener configuración
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            logger.error("No se encontró la API key de OpenAI. Configura la variable de entorno OPENAI_API_KEY.")
+            return
+        
+        # Configuración del banco (default: Banco de la Nación)
+        bank_code = os.getenv("BANK_CODE", "bn")
+        bank_config = BANK_CONFIGS.get(bank_code)
+        
+        logger.info(f"Usando configuración para banco: {bank_config['bank_name']}")
+        
+        # Crear el repositorio
+        repository = MemoryRepository()
+        logger.info("Repositorio en memoria inicializado")
+        
+        # Crear el proveedor de IA de OpenAI
+        ai_provider = OpenAIProvider(
+            api_key=openai_api_key,
+            model=os.getenv("OPENAI_MODEL", "gpt-4o")
+        )
+        logger.info(f"Proveedor de OpenAI inicializado con modelo {ai_provider.model}")
+        
+        # Crear el analizador de sentimientos
+        sentimiento_analyzer = AnalizarSentimientoUseCase(ai_provider)
+        logger.info("Analizador de sentimientos inicializado")
+        
+        # Crear el servicio de chatbot
+        chatbot_service = ChatbotService(
+            repository=repository,
+            sentimiento_analyzer=sentimiento_analyzer,
+            ai_provider=ai_provider,  # IMPORTANTE: pasar el proveedor de IA
+            bank_config=bank_config
+        )
+        logger.info("Servicio de chatbot inicializado")
+        
+        # Crear el caso de uso para procesar mensajes
+        procesar_mensaje_use_case = ProcesarMensajeUseCase(
+            chatbot_service=chatbot_service,
+            ai_provider=ai_provider
+        )
+        logger.info("Caso de uso para procesar mensajes inicializado")
+        
+        # Crear la aplicación web
+        app = WebApp(procesar_mensaje_use_case=procesar_mensaje_use_case)
+        logger.info("Aplicación web inicializada")
+        
+        # Ejecutar la aplicación
+        host = os.getenv("HOST", "0.0.0.0")
+        port = int(os.getenv("PORT", "3200"))
+        debug = os.getenv("DEBUG", "False").lower() == "true"
+        
+        logger.info(f"Iniciando servidor en {host}:{port} (debug={debug})")
+        app.run(host=host, port=port, debug=debug)
+        
+    except Exception as e:
+        logger.error(f"Error al iniciar la aplicación: {e}", exc_info=True)
 
 if __name__ == "__main__":
     main()

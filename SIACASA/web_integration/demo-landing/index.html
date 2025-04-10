@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Banco de la Nación - Tu banco de confianza</title>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Configuración personalizada de Tailwind -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#004a87',      // Azul institucional
+                        secondary: '#e4002b',    // Rojo institucional
+                        tertiary: '#f5f5f5',     // Gris claro para fondos
+                        dark: '#333333',         // Texto oscuro
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Font Awesome para iconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
+    <!-- Configuración del chatbot SIACASA -->
+    <script>
+        // Configuración global del chatbot
+        window.SIACASA_CONFIG = {
+            botName: "Agente virtual",
+            botSubtitle: "Asistente Inteligente del Banco de la Nación",
+            apiEndpoint: "http://192.168.1.12:3200/api/mensaje",
+            initialMessage: "Hola, soy SIACASA, tu asistente virtual del Banco de la Nación. ¿En qué puedo ayudarte hoy?",
+            theme: {
+                primaryColor: "#BA1400",
+                secondaryColor: "#e4002b",
+                textColor: "#333333"
+            }
+        };
+    </script>
+</head>
+
+<body class="font-sans bg-gray-50">
+    <!-- Barra de navegación -->
+    <nav class="bg-white text-dark shadow-md">
+        <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+            <!-- Logo -->
+            <div class="flex items-center">
+                <img src="https://www.fonafe.gob.pe/pw_content/empresas/17/Img/BancoNacion.png?1641454588"
+                    alt="Logo Banco de la Nación" class="h-10 mr-3">
+            </div>
+
+            <!-- Menú principal -->
+            <div class="hidden md:flex space-x-6">
+                <a href="#" class="hover:text-gray-300">Inicio</a>
+                <a href="#" class="hover:text-gray-300">Productos</a>
+                <a href="#" class="hover:text-gray-300">Servicios</a>
+                <a href="#" class="hover:text-gray-300">Agencias</a>
+                <a href="#" class="hover:text-gray-300">Contacto</a>
+            </div>
+
+            <!-- Botón de banca por internet -->
+            <div>
+                <a href="#"
+                    class="bg-secondary hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                    <i class="fas fa-lock mr-1"></i> Banca en Línea
+                </a>
+            </div>
+
+            <!-- Menú móvil -->
+            <div class="md:hidden">
+                <button class="text-white focus:outline-none">
+                    <i class="fas fa-bars text-xl"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="bg-[#BA1400] text-white py-16">
+        <div class="container mx-auto px-4 md:flex items-center">
+            <div class="md:w-1/2 md:pr-8">
+                <h1 class="text-4xl md:text-5xl font-bold mb-4">Bienvenido al banco de todos los peruanos</h1>
+                <p class="text-lg mb-8">Ofrecemos soluciones financieras accesibles y seguras para mejorar tu calidad de
+                    vida.</p>
+                <div class="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4">
+                    <a href="#"
+                        class="bg-white text-primary hover:bg-gray-200 font-bold py-3 px-6 rounded-lg transition-colors text-center">
+                        Conoce nuestros productos
+                    </a>
+                    <a href="#"
+                        class="bg-secondary hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg transition-colors text-center">
+                        Abre tu cuenta ahora
+                    </a>
+                </div>
+            </div>
+            <div class="md:w-1/2 mt-8 md:mt-0">
+                <img src="https://via.placeholder.com/600x400" alt="Banco de la Nación" class="rounded-lg shadow-lg">
+            </div>
+        </div>
+    </section>
+
+    <!-- Tarjetas de productos -->
+    <section class="py-16 bg-tertiary">
+        <div class="container mx-auto px-4">
+            <h2 class="text-3xl font-bold text-center mb-12 text-dark">Nuestros Productos y Servicios</h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <!-- Tarjeta 1 -->
+                <div class="bg-white rounded-lg shadow-lg overflow-hidden transition-transform hover:scale-105">
+                    <div class="bg-primary h-2"></div>
+                    <div class="p-6">
+                        <div class="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+                            <i class="fas fa-credit-card text-primary text-2xl"></i>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2 text-dark">Cuentas y Tarjetas</h3>
+                        <p class="text-gray-600 mb-4">Abre tu cuenta de ahorros y accede a nuestra tarjeta de débito
+                            Multired para realizar todas tus operaciones.</p>
+                        <a href="#" class="text-primary font-semibold hover:underline">Saber más →</a>
+                    </div>
+                </div>
+
+                <!-- Tarjeta 2 -->
+                <div class="bg-white rounded-lg shadow-lg overflow-hidden transition-transform hover:scale-105">
+                    <div class="bg-primary h-2"></div>
+                    <div class="p-6">
+                        <div class="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+                            <i class="fas fa-hand-holding-usd text-primary text-2xl"></i>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2 text-dark">Préstamos Personales</h3>
+                        <p class="text-gray-600 mb-4">Préstamos con las mejores tasas del mercado para empleados
+                            públicos y pensionistas.</p>
+                        <a href="#" class="text-primary font-semibold hover:underline">Saber más →</a>
+                    </div>
+                </div>
+
+                <!-- Tarjeta 3 -->
+                <div class="bg-white rounded-lg shadow-lg overflow-hidden transition-transform hover:scale-105">
+                    <div class="bg-primary h-2"></div>
+                    <div class="p-6">
+                        <div class="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+                            <i class="fas fa-mobile-alt text-primary text-2xl"></i>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2 text-dark">Banca Móvil</h3>
+                        <p class="text-gray-600 mb-4">Realiza tus operaciones bancarias desde cualquier lugar a través
+                            de nuestra aplicación móvil.</p>
+                        <a href="#" class="text-primary font-semibold hover:underline">Saber más →</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Sección de indicadores -->
+    <section class="py-16 bg-white">
+        <div class="container mx-auto px-4">
+            <h2 class="text-3xl font-bold text-center mb-12 text-dark">¿Por qué elegirnos?</h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 text-center">
+                <!-- Indicador 1 -->
+                <div class="p-6">
+                    <div class="text-primary text-4xl font-bold mb-2">+190</div>
+                    <div class="text-gray-600">Años de experiencia</div>
+                </div>
+
+                <!-- Indicador 2 -->
+                <div class="p-6">
+                    <div class="text-primary text-4xl font-bold mb-2">+500</div>
+                    <div class="text-gray-600">Agencias en todo el país</div>
+                </div>
+
+                <!-- Indicador 3 -->
+                <div class="p-6">
+                    <div class="text-primary text-4xl font-bold mb-2">+10M</div>
+                    <div class="text-gray-600">Clientes satisfechos</div>
+                </div>
+
+                <!-- Indicador 4 -->
+                <div class="p-6">
+                    <div class="text-primary text-4xl font-bold mb-2">24/7</div>
+                    <div class="text-gray-600">Atención al cliente</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Sección de llamado a la acción -->
+    <section class="py-16 bg-primary text-white">
+        <div class="container mx-auto px-4 text-center">
+            <h2 class="text-3xl font-bold mb-6">Comienza a disfrutar de nuestros beneficios</h2>
+            <p class="text-lg mb-8 max-w-2xl mx-auto">Abre tu cuenta en minutos y accede a todos nuestros servicios
+                financieros con las mejores condiciones del mercado.</p>
+            <a href="#"
+                class="bg-white text-primary hover:bg-gray-200 font-bold py-3 px-8 rounded-lg transition-colors inline-block">
+                Abrir cuenta ahora
+            </a>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-white pt-12 pb-6">
+        <div class="container mx-auto px-4">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
+                <!-- Columna 1 -->
+                <div>
+                    <h3 class="text-xl font-bold mb-4">Banco de la Nación</h3>
+                    <p class="text-gray-400">El banco de todos los peruanos, comprometido con la inclusión financiera y
+                        el desarrollo del país.</p>
+                </div>
+
+                <!-- Columna 2 -->
+                <div>
+                    <h3 class="text-lg font-semibold mb-4">Enlaces rápidos</h3>
+                    <ul class="space-y-2">
+                        <li><a href="#" class="text-gray-400 hover:text-white">Inicio</a></li>
+                        <li><a href="#" class="text-gray-400 hover:text-white">Productos</a></li>
+                        <li><a href="#" class="text-gray-400 hover:text-white">Servicios</a></li>
+                        <li><a href="#" class="text-gray-400 hover:text-white">Preguntas frecuentes</a></li>
+                    </ul>
+                </div>
+
+                <!-- Columna 3 -->
+                <div>
+                    <h3 class="text-lg font-semibold mb-4">Contacto</h3>
+                    <ul class="space-y-2 text-gray-400">
+                        <li class="flex items-start">
+                            <i class="fas fa-map-marker-alt mt-1 mr-2"></i>
+                            <span>Av. Javier Prado Este 2499, San Borja, Lima</span>
+                        </li>
+                        <li class="flex items-center">
+                            <i class="fas fa-phone-alt mr-2"></i>
+                            <span>0800-10-700</span>
+                        </li>
+                        <li class="flex items-center">
+                            <i class="fas fa-envelope mr-2"></i>
+                            <span>info@bn.com.pe</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Columna 4 -->
+                <div>
+                    <h3 class="text-lg font-semibold mb-4">Síguenos</h3>
+                    <div class="flex space-x-4">
+                        <a href="#"
+                            class="bg-blue-600 w-10 h-10 rounded-full flex items-center justify-center hover:bg-blue-700">
+                            <i class="fab fa-facebook-f"></i>
+                        </a>
+                        <a href="#"
+                            class="bg-blue-400 w-10 h-10 rounded-full flex items-center justify-center hover:bg-blue-500">
+                            <i class="fab fa-twitter"></i>
+                        </a>
+                        <a href="#"
+                            class="bg-gradient-to-r from-purple-500 to-pink-500 w-10 h-10 rounded-full flex items-center justify-center hover:from-purple-600 hover:to-pink-600">
+                            <i class="fab fa-instagram"></i>
+                        </a>
+                        <a href="#"
+                            class="bg-red-600 w-10 h-10 rounded-full flex items-center justify-center hover:bg-red-700">
+                            <i class="fab fa-youtube"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="border-t border-gray-700 pt-6">
+                <div class="flex flex-col md:flex-row justify-between items-center">
+                    <div class="mb-4 md:mb-0">
+                        <p class="text-gray-400">© 2025 Banco de la Nación. Todos los derechos reservados.</p>
+                    </div>
+                    <div class="flex space-x-4">
+                        <a href="#" class="text-gray-400 hover:text-white">Términos y condiciones</a>
+                        <a href="#" class="text-gray-400 hover:text-white">Políticas de privacidad</a>
+                        <a href="#" class="text-gray-400 hover:text-white">Libro de reclamaciones</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Inicialización del chatbot (código mínimo) -->
+    <script>
+        // Crear el contenedor del chatbot
+        document.addEventListener('DOMContentLoaded', function () {
+            const chatbotContainer = document.createElement('div');
+            chatbotContainer.id = 'siacasa-chatbot-container';
+            chatbotContainer.style.position = 'fixed';
+            chatbotContainer.style.bottom = '20px';
+            chatbotContainer.style.right = '20px';
+            chatbotContainer.style.zIndex = '9999';
+            document.body.appendChild(chatbotContainer);
+
+            // Actualizar configuración con el selector del contenedor
+            if (window.SIACASA_CONFIG) {
+                window.SIACASA_CONFIG.containerSelector = '#siacasa-chatbot-container';
+            }
+
+            // Cargar el script del chatbot
+            const script = document.createElement('script');
+            script.src = "http://192.168.1.12:3200/api/embed/bn.js";
+            document.body.appendChild(script);
+        });
+    </script>
+</body>
+
+</html>

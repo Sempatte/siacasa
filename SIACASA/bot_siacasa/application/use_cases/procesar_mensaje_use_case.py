@@ -21,6 +21,9 @@ class ProcesarMensajeUseCase:
         """
         self.chatbot_service = chatbot_service
         self.ai_provider = ai_provider
+        
+        if hasattr(chatbot_service, 'ai_provider') and chatbot_service.ai_provider is None:
+            chatbot_service.ai_provider = ai_provider
     
     def execute(self, mensaje_usuario: str, usuario_id: Optional[str] = None, info_usuario: Optional[Dict] = None) -> str:
         """
@@ -39,12 +42,18 @@ class ProcesarMensajeUseCase:
             if not usuario_id:
                 usuario_id = str(uuid.uuid4())
             
-            # Registrar el mensaje
-            logger.info(f"Mensaje recibido de {usuario_id}: {mensaje_usuario}")
+            # CAMBIO 1: Mejorar el logging para depuración
+            logger.info(f"Procesando mensaje para usuario {usuario_id}: {mensaje_usuario}")
             
             # Actualizar información del usuario si se proporciona
             if info_usuario:
                 self.chatbot_service.actualizar_datos_usuario(usuario_id, info_usuario)
+            
+            # CAMBIO 2: Obtener la conversación ANTES de agregar mensajes
+            # para verificar si existe y tiene historial
+            conversacion = self.chatbot_service.obtener_o_crear_conversacion(usuario_id)
+            mensaje_count_before = len(conversacion.mensajes) if conversacion else 0
+            logger.info(f"Conversación encontrada con {mensaje_count_before} mensajes")
             
             # Agregar el mensaje del usuario a la conversación
             self.chatbot_service.agregar_mensaje_usuario(usuario_id, mensaje_usuario)
@@ -52,35 +61,42 @@ class ProcesarMensajeUseCase:
             # Analizar el sentimiento del mensaje
             datos_sentimiento = self.chatbot_service.analizar_sentimiento_mensaje(mensaje_usuario)
             
-            # Generar instrucciones adicionales basadas en el sentimiento
+            # CAMBIO 3: Obtener el historial COMPLETO de mensajes
+            mensajes = self.chatbot_service.obtener_historial_mensajes(usuario_id)
+            logger.info(f"Historial obtenido con {len(mensajes)} mensajes")
+            
+            # CAMBIO 4: Log de los primeros mensajes para verificar formato
+            for i, msg in enumerate(mensajes[:3]):  # Solo mostrar los primeros 3 para evitar logs gigantes
+                logger.info(f"Mensaje #{i}: role={msg['role']}, content={msg['content'][:50]}...")
+            
+            # CAMBIO 5: Modificar las instrucciones adicionales para ser muy explícito
+            # sobre el uso del historial
             instrucciones_adicionales = f"""
-            Información sobre el sentimiento detectado en el último mensaje del usuario:
-            - Sentimiento general: {datos_sentimiento.sentimiento}
+            CONTEXTO ACTUAL:
+            Esta conversación tiene {len(mensajes)} mensajes anteriores que DEBES usar para mantener el contexto.
+            
+            INFORMACIÓN SOBRE EL SENTIMIENTO:
+            - Sentimiento detectado: {datos_sentimiento.sentimiento}
             - Nivel de confianza: {datos_sentimiento.confianza}
             - Emociones detectadas: {', '.join(datos_sentimiento.emociones)}
             
-            Adapta tu respuesta al estado emocional del cliente. Si está molesto o frustrado,
-            muestra más empatía y comprensión. Si está confundido, sé más claro y didáctico.
-            Si está satisfecho, mantén un tono positivo y cordial.
+            INSTRUCCIONES IMPORTANTES:
+            1. DEBES usar la información de los mensajes anteriores para dar contexto a tu respuesta.
+            2. NO digas que no puedes recordar la conversación o que tienes limitaciones de memoria.
+            3. Si el usuario hace referencia a algo mencionado previamente, DEBES responder basado
+            en esa información previa.
+            4. Adapta tu tono al estado emocional del cliente.
+            5. Usa un lenguaje natural y conversacional.
             """
             
-            # Verificar si el usuario está solicitando información actualizada
-            if self._requiere_informacion_web(mensaje_usuario):
-                try:
-                    # Extraer la consulta de búsqueda
-                    consulta = self._extraer_consulta_busqueda(mensaje_usuario)
-                    
-                    # Buscar información en internet
-                    info_web = self.chatbot_service.buscar_informacion_web(consulta)
-                    
-                    # Agregar la información al contexto para generar una mejor respuesta
-                    instrucciones_adicionales += f"\n\nInformación de internet sobre '{consulta}':\n{info_web}\n\nUtiliza esta información para elaborar tu respuesta."
-                    
-                except Exception as e:
-                    logger.error(f"Error al procesar búsqueda web: {e}")
-            
-            # Obtener el historial de mensajes
-            mensajes = self.chatbot_service.obtener_historial_mensajes(usuario_id)
+            # CAMBIO 6: Si es el primer mensaje del usuario, modificar instrucciones
+            if mensaje_count_before <= 1:  # Solo hay mensaje de sistema
+                logger.info("Primera interacción con este usuario, usando saludo inicial")
+                # Para el primer mensaje, dar instrucciones de bienvenida
+                instrucciones_adicionales += """
+                Esta es la primera interacción con este usuario. Da la bienvenida y preséntate
+                como asistente virtual bancario, sin asumir información previa.
+                """
             
             # Generar respuesta con el modelo de IA
             respuesta = self.ai_provider.generar_respuesta(mensajes, instrucciones_adicionales)
@@ -89,50 +105,14 @@ class ProcesarMensajeUseCase:
             self.chatbot_service.agregar_mensaje_asistente(usuario_id, respuesta)
             
             # Registrar la respuesta
-            logger.info(f"Respuesta enviada a {usuario_id}: {respuesta}")
+            logger.info(f"Respuesta enviada a {usuario_id}: {respuesta[:100]}...")
             
             return respuesta
             
         except Exception as e:
-            logger.error(f"Error al procesar mensaje: {e}")
+            logger.error(f"Error al procesar mensaje: {e}", exc_info=True)  # Incluir stack trace
             return "Lo siento, ocurrió un error al procesar tu mensaje. Por favor, inténtalo de nuevo."
+
+
     
-    def _requiere_informacion_web(self, mensaje: str) -> bool:
-        try:
-            # Palabras clave que sugieren necesidad de información actualizada
-            palabras_clave = [
-                "actualizado", "reciente", "última", "últimas", "nuevas", 
-                "noticias", "información actual", "datos recientes", 
-                "busca", "encuentra", "investiga", "buscar en internet"
-            ]
-            
-            # Convertir el mensaje a minúsculas
-            mensaje_lower = mensaje.lower()
-            logger.debug(f"Mensaje convertido a minúsculas: {mensaje_lower}")
-            
-            # Verificar si contiene alguna palabra clave
-            for palabra in palabras_clave:
-                if palabra in mensaje_lower:
-                    logger.debug(f"Requiere busqueda.")
-                    logger.debug(f"Palabra clave encontrada: {palabra}")
-                    return True
-            
-            logger.debug("No requiere búsqueda web.")
-            return False
-            
-        except Exception as e:
-            logger.error(f"Error en _requiere_informacion_web: {e}")
-            return False
     
-    def _extraer_consulta_busqueda(self, mensaje: str) -> str:
-        """
-        Extrae la consulta de búsqueda del mensaje del usuario.
-        
-        Args:
-            mensaje: Mensaje del usuario
-            
-        Returns:
-            Consulta de búsqueda
-        """
-        # Esta es una implementación simple. Podrías usar NLP para una extracción más precisa
-        return mensaje
