@@ -205,7 +205,8 @@ Este proyecto está licenciado bajo [MIT License](LICENSE).
 
 ## Autor
 
-Sebastián Enrique De La Torre Chihuan - [sebastian.delatorre@upc.edu.pe](mailto:sebastian.delatorre@upc.edu.pe)
+Sebastián De La Torre - [u201816293@upc.edu.pe](mailto:u201816293@upc.edu.pe)
+Sebastian Moreyra
 
 ---
 

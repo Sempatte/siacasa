@@ -34,7 +34,7 @@
         window.SIACASA_CONFIG = {
             botName: "Agente virtual",
             botSubtitle: "Asistente Inteligente del Banco de la Nación",
-            apiEndpoint: "http://192.168.1.12:3200/api/mensaje",
+            apiEndpoint: "http://localhost:3200/api/mensaje",
             initialMessage: "Hola, soy SIACASA, tu asistente virtual del Banco de la Nación. ¿En qué puedo ayudarte hoy?",
             theme: {
                 primaryColor: "#BA1400",
@@ -100,7 +100,7 @@
                 </div>
             </div>
             <div class="md:w-1/2 mt-8 md:mt-0">
-                <img src="https://via.placeholder.com/600x400" alt="Banco de la Nación" class="rounded-lg shadow-lg">
+                <img src="https://www.bn.com.pe/img/banner/AppBN.png" alt="Banco de la Nación">
             </div>
         </div>
     </section>
@@ -301,7 +301,7 @@
 
             // Cargar el script del chatbot
             const script = document.createElement('script');
-            script.src = "http://192.168.1.12:3200/api/embed/bn.js";
+            script.src = "http://localhost:3200/api/embed/bn.js";
             document.body.appendChild(script);
         });
     </script>
