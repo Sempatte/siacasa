@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>
+      {% block title %}Panel de Administración SIACASA{% endblock %}
+    </title>
+
+    <!-- Bootstrap CSS -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+
+    <!-- Font Awesome -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+
+    <!-- Estilos propios -->
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/admin.css') }}"
+    />
+
+    {% block extra_css %}{% endblock %}
+  </head>
+  <body>
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo-container">
+          <img
+            src="{{ url_for('static', filename='img/logo.png') }}"
+            alt="SIACASA Logo"
+            class="img-fluid"
+          />
+        </div>
+        <h5>SIACASA</h5>
+        <p class="small">Panel de Administración</p>
+      </div>
+
+      <div class="sidebar-menu">
+        <ul class="nav flex-column">
+          <li class="nav-item">
+            
+              class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}"
+              href="{{ url_for('dashboard') }}"
+            >
+              <i class="fas fa-tachometer-alt me-2"></i> Dashboard
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link {% if request.endpoint and request.endpoint.startswith('training') %}active{% endif %}" href="{{ url_for('training.index') }}">
+              <i class="fas fa-robot me-2"></i> Entrenamiento
+            </a>
+          </li>
+          <li class="nav-item">
+            
+              class="nav-link {% if request.endpoint and request.endpoint.startswith('conversations') %}active{% endif %}"
+              href="#"
+            >
+              <i class="fas fa-comments me-2"></i> Conversaciones
+            </a>
+          </li>
+          <li class="nav-item">
+            
+              class="nav-link {% if request.endpoint and request.endpoint.startswith('analytics') %}active{% endif %}"
+              href="#"
+            >
+              <i class="fas fa-chart-line me-2"></i> Análisis
+            </a>
+          </li>
+          <li class="nav-item">
+            
+              class="nav-link {% if request.endpoint and request.endpoint.startswith('settings') %}active{% endif %}"
+              href="#"
+            >
+              <i class="fas fa-cog me-2"></i> Configuración
+            </a>
+          </li>
+        </ul>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="bank-info">
+          <span class="bank-label">Banco:</span>
+          <span class="bank-name">{{ bank_name }}</span>
+        </div>
+        <a href="{{ url_for('logout') }}" class="btn btn-outline-light btn-sm">
+          <i class="fas fa-sign-out-alt me-1"></i> Cerrar Sesión
+        </a>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <!-- Top Navigation -->
+      <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+        <div class="container-fluid">
+          <button class="btn btn-light" id="sidebar-toggle">
+            <i class="fas fa-bars"></i>
+          </button>
+
+          <div class="d-flex align-items-center">
+            <div class="dropdown">
+              <button
+                class="btn btn-light dropdown-toggle"
+                type="button"
+                id="userDropdown"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
+              >
+                <i class="fas fa-user-circle me-1"></i> {{ user_name }}
+              </button>
+              <ul
+                class="dropdown-menu dropdown-menu-end"
+                aria-labelledby="userDropdown"
+              >
+                <li>
+                  <a class="dropdown-item" href="#"
+                    ><i class="fas fa-user me-2"></i> Mi Perfil</a
+                  >
+                </li>
+                <li><hr class="dropdown-divider" /></li>
+                <li>
+                  <a class="dropdown-item" href="{{ url_for('logout') }}"
+                    ><i class="fas fa-sign-out-alt me-2"></i> Cerrar Sesión</a
+                  >
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      <!-- Page Content -->
+      <div class="content-wrapper">
+        <!-- Breadcrumb -->
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb">
+            {% block breadcrumb %}
+            <li class="breadcrumb-item">
+              <a href="{{ url_for('dashboard') }}">Inicio</a>
+            </li>
+            <li class="breadcrumb-item active" aria-current="page">
+              Dashboard
+            </li>
+            {% endblock %}
+          </ol>
+        </nav>
+
+        <!-- Content -->
+        <div class="content-container">
+          <!-- Flash Messages -->
+          {% with messages = get_flashed_messages(with_categories=true) %} {% if
+          messages %} {% for category, message in messages %}
+          <div
+            class="alert alert-{{ category }} alert-dismissible fade show"
+            role="alert"
+          >
+            {{ message }}
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="alert"
+              aria-label="Close"
+            ></button>
+          </div>
+          {% endfor %} {% endif %} {% endwith %}
+
+          <!-- Page Heading -->
+          <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h3 mb-0 text-gray-800">
+              {% block page_title %}Dashboard{% endblock %}
+            </h1>
+            <div class="page-actions">
+              {% block page_actions %}{% endblock %}
+            </div>
+          </div>
+
+          <!-- Main Content Area -->
+          {% block content %}{% endblock %}
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+          <div class="container-fluid">
+            <div class="d-flex justify-content-between align-items-center">
+              <div>
+                <span class="text-muted"
+                  >© 2025 SIACASA - Todos los derechos reservados</span
+                >
+              </div>
+              <div>
+                <span class="text-muted">Versión 1.0.0</span>
+              </div>
+            </div>
+          </div>
+        </footer>
+      </div>
+    </div>
+
+    <!-- Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Scripts propios -->
+    <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+
+    <!-- Script para mostrar/ocultar sidebar -->
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        const sidebarToggle = document.getElementById("sidebar-toggle");
+        const body = document.body;
+
+        sidebarToggle.addEventListener("click", function () {
+          body.classList.toggle("sidebar-collapsed");
+        });
+
+        // En pantallas pequeñas, colapsar sidebar por defecto
+        function checkWidth() {
+          if (window.innerWidth < 992) {
+            body.classList.add("sidebar-collapsed");
+          } else {
+            body.classList.remove("sidebar-collapsed");
+          }
+        }
+
+        // Comprobar al cargar y al redimensionar
+        checkWidth();
+        window.addEventListener("resize", checkWidth);
+      });
+    </script>
+
+    {% block extra_scripts %}{% endblock %}
+  </body>
+</html>

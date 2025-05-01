@@ -1,0 +1,379 @@
+{% extends 'base.html' %}
+
+{% block title %}Entrenamiento - Panel de Administración SIACASA{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Inicio</a></li>
+<li class="breadcrumb-item active" aria-current="page">Entrenamiento</li>
+{% endblock %}
+
+{% block page_title %}Entrenamiento del Chatbot{% endblock %}
+
+{% block page_actions %}
+<button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#uploadModal">
+    <i class="fas fa-upload me-2"></i> Subir Archivo
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Lista de Archivos de Entrenamiento -->
+    <div class="col-lg-12 mb-4">
+        <div class="file-list-container">
+            <div class="file-list-header">
+                <h5 class="mb-0">Archivos de Entrenamiento</h5>
+                <div>
+                    <form id="trainingForm" action="{{ url_for('training.start_training') }}" method="POST" class="d-inline">
+                        <button type="submit" class="btn btn-success" id="startTrainingBtn" disabled>
+                            <i class="fas fa-robot me-2"></i> Entrenar con Seleccionados
+                        </button>
+                    </form>
+                </div>
+            </div>
+            
+            {% if training_files %}
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th width="30">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="selectAll">
+                                </div>
+                            </th>
+                            <th>Nombre</th>
+                            <th>Tipo</th>
+                            <th>Tamaño</th>
+                            <th>Estado</th>
+                            <th>Fecha de Subida</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for file in training_files %}
+                        <tr>
+                            <td>
+                                <div class="form-check">
+                                    <input class="form-check-input file-checkbox" type="checkbox" name="file_ids[]" value="{{ file.id }}" form="trainingForm" {% if file.status != 'completed' %}disabled{% endif %}>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    {% if file.file_type in ['txt', 'text/plain'] %}
+                                    <i class="fas fa-file-alt text-secondary me-2"></i>
+                                    {% elif file.file_type in ['pdf', 'application/pdf'] %}
+                                    <i class="fas fa-file-pdf text-danger me-2"></i>
+                                    {% elif file.file_type in ['doc', 'docx', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'] %}
+                                    <i class="fas fa-file-word text-primary me-2"></i>
+                                    {% elif file.file_type in ['xls', 'xlsx', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'] %}
+                                    <i class="fas fa-file-excel text-success me-2"></i>
+                                    {% elif file.file_type in ['csv', 'text/csv'] %}
+                                    <i class="fas fa-file-csv text-success me-2"></i>
+                                    {% elif file.file_type in ['json', 'application/json'] %}
+                                    <i class="fas fa-file-code text-warning me-2"></i>
+                                    {% elif file.file_type in ['md', 'markdown', 'text/markdown'] %}
+                                    <i class="fab fa-markdown text-info me-2"></i>
+                                    {% elif file.file_type in ['html', 'htm', 'text/html'] %}
+                                    <i class="fas fa-file-code text-danger me-2"></i>
+                                    {% else %}
+                                    <i class="fas fa-file text-secondary me-2"></i>
+                                    {% endif %}
+                                    
+                                    <div>
+                                        <div class="fw-medium">{{ file.original_filename }}</div>
+                                        <div class="small text-muted">{{ file.description|truncate(50) if file.description else 'Sin descripción' }}</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>{{ file.file_type }}</td>
+                            <td>{{ (file.file_size / 1024)|round(1) }} KB</td>
+                            <td>
+                                {% if file.status == 'pending' %}
+                                <span class="badge status-pending">Pendiente</span>
+                                {% elif file.status == 'processing' %}
+                                <span class="badge status-processing">Procesando</span>
+                                {% elif file.status == 'completed' %}
+                                <span class="badge status-completed">Completado</span>
+                                {% elif file.status == 'error' %}
+                                <span class="badge status-error">Error</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Desconocido</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ file.uploaded_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                            <td>
+                                <div class="dropdown">
+                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="dropdownMenuButton{{ loop.index }}" data-bs-toggle="dropdown" aria-expanded="false">
+                                        Acciones
+                                    </button>
+                                    <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton{{ loop.index }}">
+                                        <li><a class="dropdown-item" href="{{ url_for('training.file_details', file_id=file.id) }}"><i class="fas fa-eye me-2"></i> Ver Detalles</a></li>
+                                        <li><a class="dropdown-item" href="{{ url_for('training.download_file', file_id=file.id) }}"><i class="fas fa-download me-2"></i> Descargar</a></li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li>
+                                            <form action="{{ url_for('training.delete_file', file_id=file.id) }}" method="POST" onsubmit="return confirm('¿Estás seguro de que quieres eliminar este archivo?');">
+                                                <button type="submit" class="dropdown-item text-danger"><i class="fas fa-trash-alt me-2"></i> Eliminar</button>
+                                            </form>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <div class="mb-3">
+                    <i class="fas fa-file-upload fa-3x text-muted"></i>
+                </div>
+                <h5 class="text-muted">No hay archivos de entrenamiento</h5>
+                <p class="text-muted">Sube archivos para comenzar a entrenar el chatbot</p>
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#uploadModal">
+                    <i class="fas fa-upload me-2"></i> Subir Archivo
+                </button>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Historial de Entrenamientos -->
+    <div class="col-lg-12">
+        <div class="card shadow-sm">
+            <div class="card-header py-3">
+                <h5 class="mb-0">Historial de Entrenamientos</h5>
+            </div>
+            <div class="card-body">
+                {% if training_history %}
+                <div class="table-responsive">
+                    <table class="table history-table">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Archivos</th>
+                                <th>Estado</th>
+                                <th>Éxito/Error</th>
+                                <th>Duración</th>
+                                <th>Iniciado por</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for session in training_history %}
+                            <tr>
+                                <td>{{ session.start_time.strftime('%d/%m/%Y %H:%M') }}</td>
+                                <td>{{ session.files_count }}</td>
+                                <td>
+                                    {% if session.status == 'pending' %}
+                                    <span class="badge status-pending">Pendiente</span>
+                                    {% elif session.status == 'processing' %}
+                                    <span class="badge status-processing">Procesando</span>
+                                    {% elif session.status == 'completed' %}
+                                    <span class="badge status-completed">Completado</span>
+                                    {% elif session.status == 'error' %}
+                                    <span class="badge status-error">Error</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Desconocido</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ session.success_count }}/{{ session.error_count }}</td>
+                                <td>
+                                    {% if session.end_time %}
+                                    {% set duration = (session.end_time - session.start_time).total_seconds() %}
+                                    {% if duration < 60 %}
+                                    {{ duration|int }} segundos
+                                    {% else %}
+                                    {{ (duration / 60)|round(1) }} minutos
+                                    {% endif %}
+                                    {% else %}
+                                    En progreso...
+                                    {% endif %}
+                                </td>
+                                <td>{{ session.initiated_by_name }}</td>
+                                <td>
+                                    <a href="{{ url_for('training.session_details', session_id=session.id) }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-eye me-1"></i> Ver
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="fas fa-history fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">No hay historial de entrenamientos</h5>
+                    <p class="text-muted">Realiza un entrenamiento para ver su historial aquí</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Subida de Archivos -->
+<div class="modal fade" id="uploadModal" tabindex="-1" aria-labelledby="uploadModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="uploadModalLabel">Subir Archivo de Entrenamiento</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form action="{{ url_for('training.upload_file') }}" method="POST" enctype="multipart/form-data" id="uploadForm">
+                    <div class="mb-4">
+                        <div class="upload-area" id="uploadArea">
+                            <div class="upload-icon">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                            </div>
+                            <h5>Arrastra y suelta tu archivo aquí</h5>
+                            <p>o</p>
+                            <label for="file" class="btn btn-primary">
+                                <i class="fas fa-folder-open me-2"></i> Seleccionar Archivo
+                            </label>
+                            <input type="file" name="file" id="file" class="d-none" required>
+                            <div class="upload-info mt-3" id="fileInfo"></div>
+                            <div class="upload-info">
+                                Formatos soportados: TXT, PDF, DOC, DOCX, XLS, XLSX, CSV, JSON, MD, HTML
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Descripción (opcional)</label>
+                        <textarea class="form-control" name="description" id="description" rows="3" placeholder="Añade una descripción para identificar este archivo..."></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" form="uploadForm" class="btn btn-primary">
+                    <i class="fas fa-upload me-2"></i> Subir Archivo
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Prueba de embeddings -->
+<div class="card shadow-sm mt-4">
+    <div class="card-header py-3">
+        <h5 class="mb-0">Probar Embeddings</h5>
+    </div>
+    <div class="card-body">
+        <form action="{{ url_for('training.test_embedding') }}" method="POST">
+            <div class="mb-3">
+                <label for="query" class="form-label">Escribe una pregunta para probar los embeddings</label>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="query" name="query" placeholder="Ej: ¿Cuáles son los requisitos para abrir una cuenta de ahorros?">
+                    <button class="btn btn-primary" type="submit">
+                        <i class="fas fa-search me-2"></i> Probar
+                    </button>
+                </div>
+                <div class="form-text">Esto buscará en tus archivos entrenados para encontrar la información relevante.</div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Manejo de selección de archivos
+        const fileInput = document.getElementById('file');
+        const fileInfo = document.getElementById('fileInfo');
+        const uploadArea = document.getElementById('uploadArea');
+        
+        // Drag and drop
+        uploadArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            uploadArea.classList.add('drag-over');
+        });
+        
+        uploadArea.addEventListener('dragleave', function() {
+            uploadArea.classList.remove('drag-over');
+        });
+        
+        uploadArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            uploadArea.classList.remove('drag-over');
+            
+            if (e.dataTransfer.files.length) {
+                fileInput.files = e.dataTransfer.files;
+                updateFileInfo();
+            }
+        });
+        
+        // Selección de archivo
+        fileInput.addEventListener('change', updateFileInfo);
+        
+        function updateFileInfo() {
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                const fileSize = formatFileSize(file.size);
+                fileInfo.innerHTML = `<strong>${file.name}</strong> (${fileSize})`;
+                fileInfo.classList.add('text-success');
+            } else {
+                fileInfo.textContent = '';
+            }
+        }
+        
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' bytes';
+            else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+            else return (bytes / 1048576).toFixed(1) + ' MB';
+        }
+        
+        // Selección de archivos para entrenamiento
+        const selectAllCheckbox = document.getElementById('selectAll');
+        const fileCheckboxes = document.querySelectorAll('.file-checkbox');
+        const startTrainingBtn = document.getElementById('startTrainingBtn');
+        
+        if (selectAllCheckbox) {
+            selectAllCheckbox.addEventListener('change', function() {
+                const isChecked = this.checked;
+                
+                // Seleccionar solo los checkboxes no deshabilitados
+                fileCheckboxes.forEach(checkbox => {
+                    if (!checkbox.disabled) {
+                        checkbox.checked = isChecked;
+                    }
+                });
+                
+                updateTrainingButton();
+            });
+        }
+        
+        fileCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', updateTrainingButton);
+        });
+        
+        function updateTrainingButton() {
+            // Verificar si hay al menos un checkbox seleccionado
+            const anyChecked = Array.from(fileCheckboxes).some(checkbox => checkbox.checked);
+            startTrainingBtn.disabled = !anyChecked;
+        }
+        
+        // Actualización en tiempo real de los estados
+        function updateFileStatuses() {
+            fetch('/training/status')
+                .then(response => response.json())
+                .then(data => {
+                    // Actualizar estados de los archivos si hay sesiones activas
+                    if (data.active_sessions.length > 0) {
+                        // Recargar la página después de un tiempo
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 5000);
+                    }
+                })
+                .catch(error => console.error('Error al actualizar estados:', error));
+        }
+        
+        // Actualizar cada 10 segundos
+        setInterval(updateFileStatuses, 10000);
+    });
+</script>
+{% endblock %}

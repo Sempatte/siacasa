@@ -1,0 +1,115 @@
+/* admin_panel/static/css/login.css */
+
+:root {
+    --primary-color: #004a87;
+    --secondary-color: #e4002b;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+}
+
+.card {
+    border: none;
+    border-radius: 15px;
+    overflow: hidden;
+}
+
+.card-body {
+    border-radius: 15px;
+}
+
+.logo-container img {
+    max-height: 80px;
+}
+
+.form-control {
+    border-radius: 8px;
+    padding: 12px 15px;
+    border: 1px solid #ced4da;
+    background-color: #f8f9fa;
+    transition: all 0.2s ease;
+}
+
+.form-control:focus {
+    box-shadow: 0 0 0 0.25rem rgba(0, 74, 135, 0.25);
+    border-color: var(--primary-color);
+    background-color: white;
+}
+
+.input-group-text {
+    border-radius: 8px 0 0 8px;
+    border: 1px solid #ced4da;
+    border-right: none;
+}
+
+.input-group .form-control {
+    border-radius: 0 8px 8px 0;
+}
+
+.input-group .btn {
+    border-radius: 0 8px 8px 0;
+    border: 1px solid #ced4da;
+    border-left: none;
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+    border-radius: 8px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.btn-primary:hover {
+    background-color: #003a6a;
+    border-color: #003a6a;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.btn-primary:active {
+    transform: translateY(0);
+}
+
+.text-primary {
+    color: var(--primary-color) !important;
+}
+
+.form-check-input:checked {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+.form-check-input:focus {
+    box-shadow: 0 0 0 0.25rem rgba(0, 74, 135, 0.25);
+    border-color: var(--primary-color);
+}
+
+/* Animaciones */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.card {
+    animation: fadeIn 0.5s ease-out;
+}
+
+/* Responsive */
+@media (max-width: 576px) {
+    .card {
+        margin: 0 15px;
+    }
+    
+    .card-body {
+        padding: 30px 20px;
+    }
+}

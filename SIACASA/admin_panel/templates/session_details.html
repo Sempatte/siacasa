@@ -1,0 +1,297 @@
+{% extends 'base.html' %}
+
+{% block title %}Detalles de Sesión - Panel de Administración SIACASA{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Inicio</a></li>
+<li class="breadcrumb-item"><a href="{{ url_for('training.index') }}">Entrenamiento</a></li>
+<li class="breadcrumb-item active" aria-current="page">Detalles de Sesión</li>
+{% endblock %}
+
+{% block page_title %}Detalles de Sesión de Entrenamiento{% endblock %}
+
+{% block page_actions %}
+<a href="{{ url_for('training.index') }}" class="btn btn-outline-primary">
+    <i class="fas fa-arrow-left me-2"></i> Volver
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card shadow-sm">
+            <div class="card-header py-3">
+                <h5 class="mb-0">Información General</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <!-- Columna Izquierda -->
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <span class="text-muted">ID de Sesión:</span>
+                            <p class="font-monospace">{{ session.id }}</p>
+                        </div>
+                        <div class="mb-3">
+                            <span class="text-muted">Iniciado por:</span>
+                            <p>{{ session.initiated_by_name }}</p>
+                        </div>
+                        <div class="mb-3">
+                            <span class="text-muted">Fecha de Inicio:</span>
+                            <p>{{ session.start_time.strftime('%d/%m/%Y %H:%M:%S') }}</p>
+                        </div>
+                        <div class="mb-3">
+                            <span class="text-muted">Fecha de Finalización:</span>
+                            <p>
+                                {% if session.end_time %}
+                                {{ session.end_time.strftime('%d/%m/%Y %H:%M:%S') }}
+                                {% else %}
+                                <span class="badge status-processing">En Progreso</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <!-- Columna Derecha -->
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <span class="text-muted">Estado:</span>
+                            <p>
+                                {% if session.status == 'pending' %}
+                                <span class="badge status-pending">Pendiente</span>
+                                {% elif session.status == 'processing' %}
+                                <span class="badge status-processing">Procesando</span>
+                                {% elif session.status == 'completed' %}
+                                <span class="badge status-completed">Completado</span>
+                                {% elif session.status == 'error' %}
+                                <span class="badge status-error">Error</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Desconocido</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div class="mb-3">
+                            <span class="text-muted">Total de Archivos:</span>
+                            <p>{{ session.files_count }}</p>
+                        </div>
+                        <div class="mb-3">
+                            <span class="text-muted">Archivos Procesados con Éxito:</span>
+                            <p>{{ session.success_count }}</p>
+                        </div>
+                        <div class="mb-3">
+                            <span class="text-muted">Archivos con Error:</span>
+                            <p>{{ session.error_count }}</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Duración y Progreso -->
+                <div class="row mt-3">
+                    <div class="col-md-12">
+                        <div class="mb-3">
+                            <span class="text-muted">Duración:</span>
+                            <p>
+                                {% if session.end_time %}
+                                {% set duration = (session.end_time - session.start_time).total_seconds() %}
+                                {% if duration < 60 %}
+                                {{ duration|int }} segundos
+                                {% elif duration < 3600 %}
+                                {{ (duration / 60)|int }} minutos y {{ (duration % 60)|int }} segundos
+                                {% else %}
+                                {{ (duration / 3600)|int }} horas, {{ ((duration % 3600) / 60)|int }} minutos y {{ ((duration % 3600) % 60)|int }} segundos
+                                {% endif %}
+                                {% else %}
+                                <span class="badge status-processing">En progreso...</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div class="mb-3">
+                            <span class="text-muted">Progreso:</span>
+                            <div class="progress" style="height: 10px;">
+                                {% set progress = 0 %}
+                                {% if session.files_count > 0 %}
+                                {% set progress = ((session.success_count + session.error_count) / session.files_count * 100)|int %}
+                                {% endif %}
+                                
+                                {% if session.status == 'completed' %}
+                                <div class="progress-bar bg-success" role="progressbar" style="width: 100%" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"></div>
+                                {% elif session.status == 'error' %}
+                                <div class="progress-bar bg-danger" role="progressbar" style="width: 100%" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"></div>
+                                {% else %}
+                                <div class="progress-bar bg-info" role="progressbar" style="width: {{ progress }}%" aria-valuenow="{{ progress }}" aria-valuemin="0" aria-valuemax="100"></div>
+                                {% endif %}
+                            </div>
+                            <div class="d-flex justify-content-between mt-1">
+                                <small>Procesado: {{ progress }}%</small>
+                                <small>{{ session.success_count + session.error_count }} / {{ session.files_count }} archivos</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Lista de Archivos -->
+<div class="row">
+    <div class="col-md-12">
+        <div class="card shadow-sm">
+            <div class="card-header py-3">
+                <h5 class="mb-0">Archivos Procesados</h5>
+            </div>
+            <div class="card-body">
+                {% if session.files %}
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Nombre</th>
+                                <th>Tipo</th>
+                                <th>Estado</th>
+                                <th>Procesado</th>
+                                <th>Mensaje de Error</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for file in session.files %}
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        {% if file.file_type in ['txt', 'text/plain'] %}
+                                        <i class="fas fa-file-alt text-secondary me-2"></i>
+                                        {% elif file.file_type in ['pdf', 'application/pdf'] %}
+                                        <i class="fas fa-file-pdf text-danger me-2"></i>
+                                        {% elif file.file_type in ['doc', 'docx', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'] %}
+                                        <i class="fas fa-file-word text-primary me-2"></i>
+                                        {% elif file.file_type in ['xls', 'xlsx', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'] %}
+                                        <i class="fas fa-file-excel text-success me-2"></i>
+                                        {% elif file.file_type in ['csv', 'text/csv'] %}
+                                        <i class="fas fa-file-csv text-success me-2"></i>
+                                        {% elif file.file_type in ['json', 'application/json'] %}
+                                        <i class="fas fa-file-code text-warning me-2"></i>
+                                        {% elif file.file_type in ['md', 'markdown', 'text/markdown'] %}
+                                        <i class="fab fa-markdown text-info me-2"></i>
+                                        {% elif file.file_type in ['html', 'htm', 'text/html'] %}
+                                        <i class="fas fa-file-code text-danger me-2"></i>
+                                        {% else %}
+                                        <i class="fas fa-file text-secondary me-2"></i>
+                                        {% endif %}
+                                        
+                                        {{ file.original_filename }}
+                                    </div>
+                                </td>
+                                <td>{{ file.file_type }}</td>
+                                <td>
+                                    {% if file.status == 'pending' %}
+                                    <span class="badge status-pending">Pendiente</span>
+                                    {% elif file.status == 'processing' %}
+                                    <span class="badge status-processing">Procesando</span>
+                                    {% elif file.status == 'completed' %}
+                                    <span class="badge status-completed">Completado</span>
+                                    {% elif file.status == 'error' %}
+                                    <span class="badge status-error">Error</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Desconocido</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if file.processed_at %}
+                                    {{ file.processed_at.strftime('%d/%m/%Y %H:%M:%S') }}
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if file.error_message %}
+                                    <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="tooltip" data-bs-title="{{ file.error_message }}">
+                                        <i class="fas fa-exclamation-circle me-1"></i> Ver Error
+                                    </button>
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('training.file_details', file_id=file.id) }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-eye me-1"></i> Ver
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="fas fa-file-alt fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">No hay archivos asociados a esta sesión</h5>
+                    <p class="text-muted">Puede haber ocurrido un error al iniciar la sesión</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Resultados y Log -->
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card shadow-sm">
+            <div class="card-header py-3">
+                <h5 class="mb-0">Resultados y Log</h5>
+            </div>
+            <div class="card-body">
+                {% if session.results %}
+                <div class="mb-4">
+                    <h6 class="mb-3">Resultados:</h6>
+                    <div class="bg-light p-3 rounded">
+                        <pre class="mb-0"><code>{{ session.results }}</code></pre>
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if session.log_file %}
+                <div>
+                    <h6 class="mb-3">Archivo de Log:</h6>
+                    <a href="{{ url_for('training.download_log', session_id=session.id) }}" class="btn btn-outline-primary">
+                        <i class="fas fa-download me-2"></i> Descargar Log
+                    </a>
+                </div>
+                {% else %}
+                <p class="text-muted">No hay archivo de log disponible para esta sesión</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Inicializar tooltips
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+        
+        // Si la sesión está en progreso, actualizar periódicamente
+        {% if session.status == 'processing' or session.status == 'pending' %}
+        function checkSessionStatus() {
+            fetch('/training/session/{{ session.id }}/status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status !== '{{ session.status }}') {
+                        // La sesión cambió de estado, recargar la página
+                        window.location.reload();
+                    }
+                })
+                .catch(error => console.error('Error al verificar estado de sesión:', error));
+        }
+        
+        // Verificar cada 5 segundos
+        setInterval(checkSessionStatus, 5000);
+        {% endif %}
+    });
+</script>
+{% endblock %}
