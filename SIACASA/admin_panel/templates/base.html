@@ -45,7 +45,7 @@
       <div class="sidebar-menu">
         <ul class="nav flex-column">
           <li class="nav-item">
-            
+            <a
               class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}"
               href="{{ url_for('dashboard') }}"
             >
@@ -53,12 +53,15 @@
             </a>
           </li>
           <li class="nav-item">
-            <a class="nav-link {% if request.endpoint and request.endpoint.startswith('training') %}active{% endif %}" href="{{ url_for('training.index') }}">
+            <a
+              class="nav-link {% if request.endpoint and request.endpoint.startswith('training') %}active{% endif %}"
+              href="{{ url_for('training.index') }}"
+            >
               <i class="fas fa-robot me-2"></i> Entrenamiento
             </a>
           </li>
           <li class="nav-item">
-            
+            <a
               class="nav-link {% if request.endpoint and request.endpoint.startswith('conversations') %}active{% endif %}"
               href="#"
             >
@@ -66,7 +69,7 @@
             </a>
           </li>
           <li class="nav-item">
-            
+            <a
               class="nav-link {% if request.endpoint and request.endpoint.startswith('analytics') %}active{% endif %}"
               href="#"
             >
@@ -74,7 +77,7 @@
             </a>
           </li>
           <li class="nav-item">
-            
+            <a
               class="nav-link {% if request.endpoint and request.endpoint.startswith('settings') %}active{% endif %}"
               href="#"
             >

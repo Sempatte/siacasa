@@ -10,6 +10,7 @@ from admin_panel.auth.auth_middleware import login_required
 from admin_panel.training.training_service import TrainingService
 from bot_siacasa.infrastructure.db.neondb_connector import NeonDBConnector
 from bot_siacasa.infrastructure.ai.training_manager import TrainingManager
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 

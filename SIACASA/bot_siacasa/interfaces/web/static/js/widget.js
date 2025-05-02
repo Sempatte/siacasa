@@ -703,6 +703,9 @@
     let sessionId;
     // Intentar recuperar un ID existente
     const savedSessionId = localStorage.getItem('siacasa_session_id');
+    let activityTimeout = null;
+    const INACTIVITY_TIMEOUT = 15 * 60 * 1000; // 30 minutos de inactividad
+
     if (savedSessionId) {
         sessionId = savedSessionId;
     } else {
@@ -823,11 +826,79 @@
             typingIndicator.style.display = 'none';
         }
 
+        /**
+         * Inicializa el control de sesiones
+         */
+        function initSessionHandling() {
+            // Recuperar ID de usuario existente o crear uno nuevo
+            sessionId = localStorage.getItem('siacasa_session_id');
+            if (!sessionId) {
+                sessionId = generateUUID();
+                localStorage.setItem('siacasa_session_id', sessionId);
+            }
+            console.log("Usando ID de sesión:", sessionId);
+
+            // Manejar evento de cierre para finalizar la sesión
+         
+
+            // Configurar reinicio de temporizador de inactividad en cada acción del usuario
+            document.addEventListener('click', resetInactivityTimer);
+            document.addEventListener('keypress', resetInactivityTimer);
+        }
+
+        /**
+         * Reinicia el temporizador de inactividad
+         */
+        function resetInactivityTimer() {
+            // Limpiar temporizador existente
+            if (activityTimeout) {
+                clearTimeout(activityTimeout);
+            }
+
+            // Establecer nuevo temporizador
+            activityTimeout = setTimeout(function () {
+                // Finalizar sesión por inactividad
+                if (sessionId && currentSessionId) {
+                    fetch(config.apiEndpoint.replace('/mensaje', '/finalizar-sesion'), {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            usuario_id: sessionId
+                        })
+                    })
+                        .then(response => response.json())
+                        .then(data => {
+                            console.log("Sesión finalizada por inactividad:", currentSessionId);
+                            currentSessionId = null;
+                        })
+                        .catch(error => {
+                            console.error("Error al finalizar sesión por inactividad:", error);
+                        });
+                }
+            }, INACTIVITY_TIMEOUT);
+        }
+
         // Enviar mensaje al backend
         async function sendMessage(message) {
             try {
-                // Mostrar indicador de escritura
                 showTypingIndicator();
+
+                // Extraer dominio para identificar el banco
+                const currentDomain = window.location.hostname;
+
+                // Determinar banco según dominio (basado en allowed_domains en bank_configs)
+                let bankCode = 'default'; // Valor por defecto
+
+                // Verificar si estamos en un dominio del Banco de la Nación
+                if (currentDomain.includes('bn.com.pe') || currentDomain.includes('localhost')) {
+                    bankCode = 'bn';
+                }
+                // Verificar si estamos en un dominio del BCP
+                else if (currentDomain.includes('viabcp.com')) {
+                    bankCode = 'bcp';
+                }
 
                 // Enviar mensaje a la API
                 const response = await fetch(config.apiEndpoint, {
@@ -837,20 +908,15 @@
                     },
                     body: JSON.stringify({
                         mensaje: message,
-                        usuario_id: sessionId  // Usar el ID de sesión para mantener contexto
+                        usuario_id: sessionId,  // Enviar ID de usuario
+                        bank_code: bankCode     // Enviar código de banco
                     })
                 });
 
-                if (!response.ok) {
-                    throw new Error(`Error del servidor: ${response.status}`);
-                }
-
                 const data = await response.json();
 
-                // Ocultar indicador de escritura
                 hideTypingIndicator();
 
-                // Añadir respuesta del bot
                 if (data.status === 'success') {
                     addMessage(data.respuesta, false);
 
@@ -862,14 +928,11 @@
                 } else {
                     throw new Error(data.error || 'Error desconocido');
                 }
-
             } catch (error) {
                 console.error('Error en la comunicación con el chatbot:', error);
 
-                // Ocultar indicador de escritura
                 hideTypingIndicator();
 
-                // Mostrar mensaje de error
                 addMessage('Lo siento, ha ocurrido un error en la comunicación. Por favor, intenta de nuevo más tarde.', false);
             }
         }
@@ -938,4 +1001,30 @@
         // Pequeño retraso para asegurar que todo esté configurado
         setTimeout(loadAndInitialize, 100);
     }
+
+    // Manejar evento de cierre para finalizar la sesión
+    window.addEventListener('beforeunload', function() {
+        if (sessionId && currentSessionId) {
+            // El problema: sendBeacon no configura correctamente los headers
+            // Solución: crear un Blob con el tipo MIME correcto
+            const data = JSON.stringify({
+                usuario_id: sessionId
+            });
+            
+            // Crear un Blob con el tipo MIME correcto
+            const blob = new Blob([data], {
+                type: 'application/json'
+            });
+            
+            // Usar sendBeacon con el Blob
+            navigator.sendBeacon(
+                config.apiEndpoint.replace('/mensaje', '/finalizar-sesion'), 
+                blob
+            );
+            
+            console.log("Sesión finalizada al cerrar página:", currentSessionId);
+        }
+    });
+
+
 })();

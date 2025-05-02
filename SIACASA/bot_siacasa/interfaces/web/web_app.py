@@ -71,6 +71,66 @@ class WebApp:
             
             return render_template('index.html')
         
+        # NUEVO: Añadir método para finalizar una sesión
+        @self.app.route('/api/finalizar-sesion', methods=['POST'])
+        def finalizar_sesion():
+            """
+            Finaliza una sesión de chat.
+            """
+            try:
+                # Intenta obtener datos JSON, pero maneja el caso donde no hay datos JSON
+                try:
+                    datos = request.json
+                    usuario_id = datos.get('usuario_id') if datos else None
+                except:
+                    # Si hay un error al obtener JSON, intenta obtener datos de formulario
+                    usuario_id = request.form.get('usuario_id')
+                    
+                    # Si tampoco hay datos de formulario, intenta obtener datos del cuerpo bruto
+                    if not usuario_id and request.data:
+                        try:
+                            import json
+                            raw_data = json.loads(request.data.decode('utf-8'))
+                            usuario_id = raw_data.get('usuario_id')
+                        except:
+                            pass
+                
+                # Verificación final: si no hay usuario_id, devolver error
+                if not usuario_id:
+                    logger.warning("Solicitud de finalización de sesión sin ID de usuario")
+                    return jsonify({
+                        'status': 'error',
+                        'mensaje': 'Se requiere ID de usuario'
+                    }), 400
+                
+                logger.info(f"Finalizando sesión para usuario: {usuario_id}")
+                
+                # Finalizar la sesión activa del usuario
+                query = """
+                UPDATE chatbot_sessions 
+                SET end_time = %s
+                WHERE user_id = %s AND end_time IS NULL
+                """
+                
+                from bot_siacasa.infrastructure.db.neondb_connector import NeonDBConnector
+                db = NeonDBConnector()
+                
+                db.execute(query, (datetime.now(), usuario_id))
+                logger.info(f"Conversación finalizada para usuario {usuario_id}")
+                
+                return jsonify({
+                    'status': 'success',
+                    'mensaje': 'Sesión finalizada correctamente'
+                })
+                
+            except Exception as e:
+                logger.error(f"Error al finalizar sesión: {e}", exc_info=True)
+                return jsonify({
+                    'status': 'error',
+                    'mensaje': 'Error al finalizar sesión',
+                    'error': str(e)
+                }), 500
+        
         # API para procesar mensajes
         @self.app.route('/api/mensaje', methods=['POST'])
         def procesar_mensaje():
@@ -99,6 +159,12 @@ class WebApp:
                 session['usuario_id'] = usuario_id
                 logger.info(f"Usando ID de usuario: {usuario_id}")
                 
+                # Determinar el código del banco desde la solicitud o usar valor predeterminado
+                bank_code = datos.get('bank_code', 'default')
+                
+                # NUEVO: Verificar si hay una sesión activa para este usuario o crear una nueva
+                session_id = self._get_or_create_chat_session(usuario_id, bank_code)
+                
                 # Procesar mensaje con el chatbot
                 respuesta = self.procesar_mensaje_use_case.execute(
                     mensaje_usuario=mensaje,
@@ -106,11 +172,15 @@ class WebApp:
                     info_usuario=info_usuario
                 )
                 
+                # NUEVO: Actualizar contador de mensajes en la sesión
+                self._update_chat_session_message_count(session_id)
+                
                 # Devolver respuesta como JSON, incluyendo el ID de usuario
                 return jsonify({
                     'respuesta': respuesta,
                     'status': 'success',
-                    'usuario_id': usuario_id  # Devolver el ID para que el cliente lo use
+                    'usuario_id': usuario_id,  # Devolver el ID para que el cliente lo use
+                    'session_id': session_id   # Añadir el ID de sesión para referencia
                 })
             except Exception as e:
                 logger.error(f"Error al procesar mensaje: {e}", exc_info=True)
@@ -119,6 +189,7 @@ class WebApp:
                     'error': str(e),
                     'status': 'error'
                 }), 500
+
         
         # Ruta para reiniciar la conversación
         @self.app.route('/api/reiniciar', methods=['POST'])
@@ -153,6 +224,83 @@ class WebApp:
             ))
             response.headers['Content-Type'] = 'application/javascript'
             return response
+        
+        
+        
+    # NUEVO: Añadir métodos de gestión de sesiones
+    def _get_or_create_chat_session(self, usuario_id, bank_code):
+        """
+        Obtiene una sesión de chat activa o crea una nueva.
+        
+        Args:
+            usuario_id: ID del usuario
+            bank_code: Código del banco
+            
+        Returns:
+            ID de la sesión
+        """
+        try:
+            # Conectar a la base de datos
+            from bot_siacasa.infrastructure.db.neondb_connector import NeonDBConnector
+            db = NeonDBConnector()
+            
+            # PROBLEMA DETECTADO: La consulta solo busca sesiones creadas en los últimos 30 minutos
+            # SOLUCIÓN: Buscar cualquier sesión activa (sin end_time) independientemente de cuándo se creó
+            
+            # Verificar si hay una sesión activa para este usuario (sin end_time)
+            query = """
+            SELECT id FROM chatbot_sessions 
+            WHERE user_id = %s AND bank_code = %s AND end_time IS NULL 
+            ORDER BY start_time DESC LIMIT 1
+            """
+            
+            result = db.fetch_one(query, (usuario_id, bank_code))
+            
+            if result:
+                logger.info(f"Sesión activa encontrada: {result['id']} para usuario {usuario_id}")
+                return result['id']
+            
+            # Si no hay sesión activa, crear una nueva
+            session_id = str(uuid.uuid4())
+            
+            query = """
+            INSERT INTO chatbot_sessions (id, user_id, bank_code, start_time, message_count)
+            VALUES (%s, %s, %s, %s, 0)
+            """
+            
+            db.execute(query, (session_id, usuario_id, bank_code, datetime.now()))
+            logger.info(f"Nueva conversación iniciada: {session_id} para usuario {usuario_id} del banco {bank_code}")
+            
+            return session_id
+            
+        except Exception as e:
+            logger.error(f"Error al obtener/crear sesión de chat: {e}", exc_info=True)
+            # En caso de error, generar un ID de sesión temporal
+            return str(uuid.uuid4())
+        
+    def _update_chat_session_message_count(self, session_id):
+        """
+        Actualiza el contador de mensajes en una sesión.
+        
+        Args:
+            session_id: ID de la sesión
+        """
+        try:
+            query = """
+            UPDATE chatbot_sessions 
+            SET message_count = message_count + 1
+            WHERE id = %s
+            """
+            
+            from bot_siacasa.infrastructure.db.neondb_connector import NeonDBConnector
+            db = NeonDBConnector()
+            
+            db.execute(query, (session_id,))
+            
+        except Exception as e:
+            logger.error(f"Error al actualizar contador de mensajes: {e}", exc_info=True)
+
+    
     
     def run(self, host: str = '0.0.0.0', port: int = 4040, debug: bool = False, **kwargs) -> None:
         """
