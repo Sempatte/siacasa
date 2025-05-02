@@ -6,24 +6,26 @@
         botName: "Asistente Inteligente",
         botSubtitle: "SIACASA",
         apiEndpoint: "http://localhost:3200/api/mensaje",
-        initialMessage: "Hola, soy tu asistente virtual. ¿En qué puedo ayudarte hoy? :)",
+        initialMessage:
+            "Hola, soy tu asistente virtual. ¿En qué puedo ayudarte hoy? :)",
         theme: {
             primaryColor: "#004a87",
             secondaryColor: "#e4002b",
             textColor: "#333333",
-            fontFamily: "'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
-        }
+            fontFamily:
+                "'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+        },
     };
-    const userConfig = window.SIACASA_CONFIG || {};
 
     // Crear el objeto final de configuración con fusión de objetos anidados
+    const userConfig = window.SIACASA_CONFIG || {};
     const config = {
         ...defaultConfig,
         ...userConfig,
         theme: {
             ...defaultConfig.theme,
-            ...(userConfig.theme || {})
-        }
+            ...(userConfig.theme || {}),
+        },
     };
 
     console.log("Configuración final del widget:", config);
@@ -31,318 +33,138 @@
 
     // Iconos profesionales con Feather Icons
     const iconSet = {
-        chat: `
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-            </svg>
-        `,
-        send: `
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="22" y1="2" x2="11" y2="13"></line>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-            </svg>
-        `,
-        close: `
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-        `,
-        bot: `
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="11" width="18" height="10" rx="2"></rect>
-                <circle cx="12" cy="5" r="2"></circle>
-                <path d="M12 7v4"></path>
-                <line x1="8" y1="16" x2="8" y2="16"></line>
-                <line x1="16" y1="16" x2="16" y2="16"></line>
-            </svg>
-        `
+        chat: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
+        send: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>`,
+        close: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
+        bot: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"></rect><circle cx="12" cy="5" r="2"></circle><path d="M12 7v4"></path><line x1="8" y1="16" x2="8" y2="16"></line><line x1="16" y1="16" x2="16" y2="16"></line></svg>`,
     };
 
-    // Cargar marked.js dinámicamente
-    function loadMarkedLibrary() {
-        return new Promise((resolve, reject) => {
-            if (window.marked) {
-                resolve(window.marked);
-                return;
-            }
+    // Variables globales
+    let sessionId;
+    let socket = null;
+    let activeTicketId = null;
+    let lastMessageTimestamp = 0;
+    let activityTimeout = null;
+    let currentSessionId = null;
+    let messagesContainer;
+    let typingIndicator;
 
-            const script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js';
-            script.onload = () => {
-                if (window.marked) {
-                    // Configurar marked para manejar mejor el Markdown
-                    window.marked.setOptions({
-                        breaks: true,      // Convertir saltos de línea en <br>
-                        gfm: true,         // GitHub Flavored Markdown
-                        headerIds: false,  // No generar IDs para encabezados
-                        mangle: false      // No modificar enlaces de email
-                    });
-                }
-                resolve(window.marked);
-            };
-            script.onerror = () => reject(new Error('No se pudo cargar marked.js'));
-            document.head.appendChild(script);
-        });
-    }
+    // Constantes
+    const INACTIVITY_TIMEOUT = 15 * 60 * 1000; // 15 minutos
+    const POLLING_INTERVAL = 5000; // 5 segundos
+    const serverHost = window.location.hostname;
+    const serverPort = 3200;
 
-    // Cargar DOMPurify dinámicamente
-    function loadDOMPurify() {
-        return new Promise((resolve, reject) => {
-            if (window.DOMPurify) {
-                resolve(window.DOMPurify);
-                return;
-            }
-
-            const script = document.createElement('script');
-            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/dompurify/2.4.5/purify.min.js';
-            script.onload = () => resolve(window.DOMPurify);
-            script.onerror = () => reject(new Error('No se pudo cargar DOMPurify'));
-            document.head.appendChild(script);
-        });
-    }
-
-    // Función para cargar Socket.IO
-    function loadSocketIOLibrary() {
-        return new Promise((resolve, reject) => {
-            if (window.io) {
-                resolve(window.io);
-                return;
-            }
-
-            const script = document.createElement('script');
-            script.src = 'https://cdn.socket.io/4.7.4/socket.io.min.js';
-            script.integrity = 'sha384-Gr6Lu2Ajx28mzwyVR8CFkULdCU7kMlZ9UthllibdOSo6qAiN+yXNHqtgdTvFXMT4';
-            script.crossOrigin = 'anonymous';
-            script.onload = () => resolve(window.io);
-            script.onerror = () => reject(new Error('No se pudo cargar Socket.IO'));
-            document.head.appendChild(script);
-        });
-    }
-
-    // Añadir estilos CSS para elementos Markdown
-    function addMarkdownStyles() {
-        const styles = document.createElement('style');
-        styles.textContent = `
-            /* Estilos para elementos Markdown */
-            .siacasa-message ol,
-            .siacasa-message ul {
-                padding-left: 1.5em;
-                margin: 0.5em 0;
-            }
-            
-            .siacasa-message li {
-                margin-bottom: 0.5em;
-            }
-            
-            .siacasa-message p {
-                margin: 0.5em 0;
-            }
-            
-            .siacasa-message code {
-                background-color: rgba(0, 0, 0, 0.05);
-                padding: 0.2em 0.4em;
-                border-radius: 3px;
-                font-family: monospace;
-            }
-            
-            .siacasa-message pre {
-                background-color: rgba(0, 0, 0, 0.05);
-                padding: 1em;
-                border-radius: 5px;
-                overflow-x: auto;
-            }
-            
-            .siacasa-message blockquote {
-                border-left: 4px solid #ddd;
-                padding-left: 1em;
-                color: #666;
-                margin: 0.5em 0;
-            }
-            
-            .siacasa-message--bot ol {
-                list-style-type: decimal;
-            }
-            
-            .siacasa-message--bot ul {
-                list-style-type: disc;
-            }
-            
-            .siacasa-message strong {
-                font-weight: bold;
-            }
-            
-            .siacasa-message em {
-                font-style: italic;
-            }
-        `;
-        document.head.appendChild(styles);
-    }
+    // ======== CARGADORES DE BIBLIOTECAS ========
 
     /**
-     * Procesa un mensaje con formato Markdown
-     * @param {string} message - Mensaje a procesar
-     * @returns {string} - Mensaje procesado con HTML
+     * Carga dinámicamente una biblioteca externa
+     * @param {string} url - URL de la biblioteca
+     * @param {Object} options - Opciones adicionales (integrity, crossOrigin)
+     * @returns {Promise} - Promesa que se resuelve cuando la biblioteca está cargada
      */
-    async function processMarkdownAdvanced(message) {
+    function loadLibrary(url, options = {}) {
+        return new Promise((resolve, reject) => {
+            // Verificar si ya está cargada
+            if (options.checkGlobal && window[options.checkGlobal]) {
+                resolve(window[options.checkGlobal]);
+                return;
+            }
+
+            const script = document.createElement("script");
+            script.src = url;
+
+            if (options.integrity) {
+                script.integrity = options.integrity;
+                script.crossOrigin = options.crossOrigin || "anonymous";
+            }
+
+            script.onload = () => {
+                console.log(`Biblioteca cargada: ${url}`);
+                if (options.checkGlobal) {
+                    resolve(window[options.checkGlobal]);
+                } else {
+                    resolve();
+                }
+            };
+
+            script.onerror = (error) => {
+                console.error(`Error al cargar biblioteca: ${url}`, error);
+                if (options.fallbackUrl) {
+                    console.log(`Intentando con fallback: ${options.fallbackUrl}`);
+                    const fallbackScript = document.createElement("script");
+                    fallbackScript.src = options.fallbackUrl;
+                    fallbackScript.onload = () => {
+                        if (options.checkGlobal) {
+                            resolve(window[options.checkGlobal]);
+                        } else {
+                            resolve();
+                        }
+                    };
+                    fallbackScript.onerror = () =>
+                        reject(new Error(`No se pudo cargar ${url} ni su fallback`));
+                    document.head.appendChild(fallbackScript);
+                } else {
+                    reject(error);
+                }
+            };
+
+            document.head.appendChild(script);
+        });
+    }
+
+    // Función para cargar las bibliotecas necesarias
+    async function loadDependencies() {
         try {
-            // Intentar cargar las bibliotecas necesarias
-            const [marked, DOMPurify] = await Promise.all([
-                loadMarkedLibrary(),
-                loadDOMPurify()
+            // Cargar bibliotecas en paralelo
+            const [marked, DOMPurify, io] = await Promise.all([
+                loadLibrary("https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js", {
+                    checkGlobal: "marked",
+                }),
+                loadLibrary(
+                    "https://cdnjs.cloudflare.com/ajax/libs/dompurify/2.4.5/purify.min.js",
+                    {
+                        checkGlobal: "DOMPurify",
+                    }
+                ),
+                loadLibrary("https://cdn.socket.io/4.7.4/socket.io.min.js", {
+                    checkGlobal: "io",
+                    integrity:
+                        "sha384-Gr6Lu2Ajx28mzwyVR8CFkULdCU7kMlZ9UthllibdOSo6qAiN+yXNHqtgdTvFXMT4",
+                    crossOrigin: "anonymous",
+                    fallbackUrl: "https://cdn.socket.io/4.6.0/socket.io.min.js",
+                }),
             ]);
 
-            if (!marked || !DOMPurify) {
-                console.warn('No se pudieron cargar las bibliotecas para procesar Markdown');
-                return processMarkdownSimple(message);
+            // Configuración de marked
+            if (marked) {
+                marked.setOptions({
+                    breaks: true,
+                    gfm: true,
+                    headerIds: false,
+                    mangle: false,
+                });
             }
 
-            // Mejorar detección de listas numeradas
-            let enhancedMessage = message.replace(/(\d+\.\s)([^\n]+)(?!\n)/g, function (match) {
-                return match + '\n';
-            });
-
-            // Procesar el mensaje con marked
-            const html = marked.parse(enhancedMessage);
-
-            // Sanitizar el HTML resultante
-            return DOMPurify.sanitize(html);
+            return { marked, DOMPurify, io };
         } catch (error) {
-            console.error('Error al procesar Markdown avanzado:', error);
-            return processMarkdownSimple(message);
+            console.warn("No se pudieron cargar todas las dependencias", error);
+            // Devolver las bibliotecas que se hayan cargado con éxito
+            return {
+                marked: window.marked,
+                DOMPurify: window.DOMPurify,
+                io: window.io,
+            };
         }
     }
+
+    // ======== GESTIÓN DE ESTILOS ========
 
     /**
-     * Versión simple de procesamiento de Markdown sin dependencias externas
-     * @param {string} text - Texto con formato markdown
-     * @return {string} - HTML formateado
+     * Añade los estilos del widget al documento
      */
-    function processMarkdownSimple(text) {
-        if (!text) return '';
-
-        // Paso 1: Escapar caracteres HTML para prevenir inyecciones
-        let processed = text
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
-
-        // Paso 2: Mejorar el procesamiento de listas numeradas
-        // Detectar secuencias como "1. Texto", "2. Texto", etc.
-        let listItems = [];
-        let inList = false;
-        let processedLines = processed.split('\n').map(line => {
-            const listMatch = line.match(/^(\d+)\.\s+(.*)/);
-            if (listMatch) {
-                const [_, number, content] = listMatch;
-
-                // Iniciar lista si es el primer elemento
-                if (number === '1' && !inList) {
-                    inList = true;
-                    listItems = [];
-                    return `<ol><li>${content}</li>`;
-                } else if (inList) {
-                    // Continuar lista existente
-                    return `<li>${content}</li>`;
-                }
-            } else if (inList && line.trim() === '') {
-                // Finalizar lista al encontrar línea en blanco
-                inList = false;
-                return '</ol>';
-            }
-
-            // Si no es parte de una lista, devolver línea original
-            return line;
-        });
-
-        // Cerrar lista si terminó el texto y aún estamos en una lista
-        if (inList) {
-            processedLines.push('</ol>');
-        }
-
-        processed = processedLines.join('\n');
-
-        // Paso 3: Procesar texto en negrita (**texto**)
-        processed = processed.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-
-        // Paso 4: Procesar texto en cursiva (*texto*)
-        processed = processed.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-
-        // Paso 5: Procesar saltos de línea
-        processed = processed.replace(/\n/g, '<br>');
-
-        return processed;
-    }
-
-    // Crear elementos del widget
-    function createChatWidget() {
-        // Contenedor principal
-        const widget = document.createElement('div');
-        widget.id = 'siacasa-widget';
-        widget.className = 'siacasa-widget siacasa-widget--closed';
-
-        // Botón de chat (visible cuando está cerrado)
-        const chatButton = document.createElement('button');
-        chatButton.className = 'siacasa-widget__button';
-        chatButton.innerHTML = `
-            <span class="siacasa-widget__icon">
-                ${iconSet.chat}
-            </span>
-            <span class="siacasa-widget__label">Asistente</span>
-        `;
-
-        // Panel de chat (oculto inicialmente)
-        const chatPanel = document.createElement('div');
-        chatPanel.className = 'siacasa-widget__panel';
-        chatPanel.innerHTML = `
-            <div class="siacasa-widget__header">
-                <button class="siacasa-widget__back">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="15 18 9 12 15 6"></polyline>
-                    </svg>
-                </button>
-                <div class="siacasa-widget__info">
-                    <div class="siacasa-widget__avatar">
-                        <div class="siacasa-widget__avatar-circle">
-                            ${iconSet.bot}
-                        </div>
-                        <div class="siacasa-widget__verify"></div>
-                    </div>
-                    <div class="siacasa-widget__title-container">
-                        <h3 class="siacasa-widget__title">${config.botName}</h3>
-                        <p class="siacasa-widget__subtitle">${config.botSubtitle}</p>
-                    </div>
-                </div>
-                <button class="siacasa-widget__close">
-                    ${iconSet.close}
-                </button>
-            </div>
-            <div class="siacasa-widget__messages" id="siacasaMessages"></div>
-            <div class="siacasa-widget__typing-indicator" id="siacasaTyping">
-                <div class="typing-bubble"></div>
-                <div class="typing-bubble"></div>
-                <div class="typing-bubble"></div>
-            </div>
-            <div class="siacasa-widget__input-container">
-                <div class="siacasa-widget__input">
-                    <input type="text" placeholder="Escribe tu mensaje aquí..." id="siacasaInput">
-                    <button id="siacasaSend" class="siacasa-widget__send">
-                        ${iconSet.send}
-                    </button>
-                </div>
-            </div>
-        `;
-
-        // Añadir elementos al widget
-        widget.appendChild(chatButton);
-        widget.appendChild(chatPanel);
-
-        return widget;
-    }
-
-    // Añadir estilos del widget
     function addStyles() {
-        const styles = document.createElement('style');
+        const styles = document.createElement("style");
         styles.textContent = `
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
             
@@ -478,7 +300,8 @@
                 width: 100%;
                 height: 100%;
                 border-radius: 50%;
-                background: linear-gradient(135deg, ${theme.primaryColor}, ${adjustColor(theme.primaryColor, 50)});
+                background: linear-gradient(135deg, ${theme.primaryColor
+            }, ${adjustColor(theme.primaryColor, 50)});
                 display: flex;
                 align-items: center;
                 justify-content: center;
@@ -668,6 +491,58 @@
                 stroke-width: 2.5px;
             }
             
+            /* Estilos para elementos Markdown */
+            .siacasa-message ol,
+            .siacasa-message ul {
+                padding-left: 1.5em;
+                margin: 0.5em 0;
+            }
+            
+            .siacasa-message li {
+                margin-bottom: 0.5em;
+            }
+            
+            .siacasa-message p {
+                margin: 0.5em 0;
+            }
+            
+            .siacasa-message code {
+                background-color: rgba(0, 0, 0, 0.05);
+                padding: 0.2em 0.4em;
+                border-radius: 3px;
+                font-family: monospace;
+            }
+            
+            .siacasa-message pre {
+                background-color: rgba(0, 0, 0, 0.05);
+                padding: 1em;
+                border-radius: 5px;
+                overflow-x: auto;
+            }
+            
+            .siacasa-message blockquote {
+                border-left: 4px solid #ddd;
+                padding-left: 1em;
+                color: #666;
+                margin: 0.5em 0;
+            }
+            
+            .siacasa-message--bot ol {
+                list-style-type: decimal;
+            }
+            
+            .siacasa-message--bot ul {
+                list-style-type: disc;
+            }
+            
+            .siacasa-message strong {
+                font-weight: bold;
+            }
+            
+            .siacasa-message em {
+                font-style: italic;
+            }
+            
             @media (max-width: 480px) {
                 .siacasa-widget__panel {
                     width: 100%;
@@ -693,7 +568,14 @@
         document.head.appendChild(styles);
     }
 
-    // Función para ajustar colores
+    // ======== UTILIDADES ========
+
+    /**
+     * Función para ajustar colores
+     * @param {string} hex - Color en formato hexadecimal
+     * @param {number} amount - Cantidad a ajustar
+     * @returns {string} - Color ajustado
+     */
     function adjustColor(hex, amount) {
         // Convertir hex a RGB
         let r = parseInt(hex.substring(1, 3), 16);
@@ -703,433 +585,769 @@
         // Ajustar
         r = Math.max(0, Math.min(255, r + amount));
         g = Math.max(0, Math.min(255, g + amount));
-
         b = Math.max(0, Math.min(255, b + amount));
 
         // Convertir de vuelta a hex
         return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
     }
 
-    // Generar UUID para la sesión
+    /**
+     * Genera un UUID para la sesión
+     * @returns {string} - UUID generado
+     */
     function generateUUID() {
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-            const r = Math.random() * 16 | 0;
-            const v = c === 'x' ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
-        });
+        return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
+            /[xy]/g,
+            function (c) {
+                const r = (Math.random() * 16) | 0;
+                const v = c === "x" ? r : (r & 0x3) | 0x8;
+                return v.toString(16);
+            }
+        );
     }
 
-    let sessionId;
-    let activeTicketId = null; // Variable para almacenar el ID de ticket activo
-    let lastMessageTimestamp = 0; // Variable para almacenar el timestamp del último mensaje
-    // Intentar recuperar un ID existente
-    const savedSessionId = localStorage.getItem('siacasa_session_id');
-    let activityTimeout = null;
-    const INACTIVITY_TIMEOUT = 15 * 60 * 1000; // 30 minutos de inactividad
-
-    if (savedSessionId) {
-        sessionId = savedSessionId;
-    } else {
-        // Generar nuevo ID si no existe
-        sessionId = generateUUID();
-        localStorage.setItem('siacasa_session_id', sessionId);
-    }
-
-    // Formatear hora
+    /**
+     * Formatea la hora actual
+     * @returns {string} - Hora formateada
+     */
     function formatTime() {
         const now = new Date();
         let hours = now.getHours();
-        const minutes = now.getMinutes().toString().padStart(2, '0');
-        const ampm = hours >= 12 ? 'PM' : 'AM';
+        const minutes = now.getMinutes().toString().padStart(2, "0");
+        const ampm = hours >= 12 ? "PM" : "AM";
         hours = hours % 12;
         hours = hours ? hours : 12; // La hora '0' debe ser '12'
         return `${hours}:${minutes} ${ampm}`;
     }
 
-    // Inicializar widget
-    function initWidget() {
-        // Añadir estilos
-        addStyles();
+    /**
+     * Determina el código de banco según el dominio actual
+     * @returns {string} - Código de banco
+     */
+    function getBankCode() {
+        const currentDomain = window.location.hostname;
 
-        // Añadir estilos para Markdown
-        addMarkdownStyles();
-
-        // Crear y añadir el widget al DOM
-        const widget = createChatWidget();
-        document.body.appendChild(widget);
-
-        // Elementos del widget
-        const chatButton = widget.querySelector('.siacasa-widget__button');
-        const closeButton = widget.querySelector('.siacasa-widget__close');
-        const backButton = widget.querySelector('.siacasa-widget__back');
-        const sendButton = document.getElementById('siacasaSend');
-        const inputField = document.getElementById('siacasaInput');
-        const messagesContainer = document.getElementById('siacasaMessages');
-        const typingIndicator = document.getElementById('siacasaTyping');
-
-        // Clave única para localStorage basada en el usuario y el día
-        const todayKey = new Date().toISOString().split('T')[0]; // Formato: YYYY-MM-DD
-        const storageKey = `siacasa_greeted_${sessionId}_${todayKey}`;
-
-        // Verificar si ya se mostró el mensaje inicial hoy para esta sesión
-        const wasGreetedToday = localStorage.getItem(storageKey);
-
-        if (!wasGreetedToday) {
-            // Añadir mensaje inicial del bot
-            addMessage(config.initialMessage, false);
-            // Guardar en localStorage que ya se mostró el mensaje
-            localStorage.setItem(storageKey, 'true');
-        } else {
-            // Verificar si hay mensajes anteriores en el historial
-            const hasMessages = messagesContainer.children.length > 0;
-            // Si no hay mensajes (primera vez que se abre), mostrar mensaje inicial
-            if (!hasMessages) {
-                addMessage(config.initialMessage, false);
-            }
+        if (
+            currentDomain.includes("bn.com.pe") ||
+            currentDomain.includes("localhost")
+        ) {
+            return "bn";
+        } else if (currentDomain.includes("viabcp.com")) {
+            return "bcp";
         }
 
-        // Abrir chat
-        chatButton.addEventListener('click', () => {
-            widget.classList.remove('siacasa-widget--closed');
-            // Focus en el input cuando se abre el chat
-            setTimeout(() => inputField.focus(), 300);
+        return "default";
+    }
+
+    // ======== PROCESAMIENTO DE MARKDOWN ========
+
+    /**
+     * Procesa un mensaje con formato Markdown
+     * @param {string} message - Mensaje a procesar
+     * @returns {string} - Mensaje procesado con HTML
+     */
+    async function processMarkdown(message) {
+        try {
+            // Intentar usar marked y DOMPurify si están disponibles
+            if (window.marked && window.DOMPurify) {
+                // Mejorar detección de listas numeradas
+                let enhancedMessage = message.replace(
+                    /(\d+\.\s)([^\n]+)(?!\n)/g,
+                    function (match) {
+                        return match + "\n";
+                    }
+                );
+
+                // Procesar el mensaje con marked
+                const html = window.marked.parse(enhancedMessage);
+
+                // Sanitizar el HTML resultante
+                return window.DOMPurify.sanitize(html);
+            } else {
+                // Fallback a versión simple
+                return processMarkdownSimple(message);
+            }
+        } catch (error) {
+            console.error("Error al procesar Markdown:", error);
+            return processMarkdownSimple(message);
+        }
+    }
+
+    /**
+     * Versión simple de procesamiento de Markdown sin dependencias externas
+     * @param {string} text - Texto con formato markdown
+     * @return {string} - HTML formateado
+     */
+    function processMarkdownSimple(text) {
+        if (!text) return "";
+
+        // Paso 1: Escapar caracteres HTML para prevenir inyecciones
+        let processed = text
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
+
+        // Paso 2: Mejorar el procesamiento de listas numeradas
+        let inList = false;
+        let processedLines = processed.split("\n").map((line) => {
+            const listMatch = line.match(/^(\d+)\.\s+(.*)/);
+            if (listMatch) {
+                const [_, number, content] = listMatch;
+
+                // Iniciar lista si es el primer elemento
+                if (number === "1" && !inList) {
+                    inList = true;
+                    return `<ol><li>${content}</li>`;
+                } else if (inList) {
+                    // Continuar lista existente
+                    return `<li>${content}</li>`;
+                }
+            } else if (inList && line.trim() === "") {
+                // Finalizar lista al encontrar línea en blanco
+                inList = false;
+                return "</ol>";
+            }
+
+            // Si no es parte de una lista, devolver línea original
+            return line;
         });
 
-        // Cerrar chat
-        closeButton.addEventListener('click', () => {
-            widget.classList.add('siacasa-widget--closed');
-        });
-
-        // Botón atrás (igual que cerrar en versión móvil)
-        backButton.addEventListener('click', () => {
-            widget.classList.add('siacasa-widget--closed');
-        });
-
-        // Función para añadir mensaje al chat
-        async function addMessage(message, isUser) {
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `siacasa-message ${isUser ? 'siacasa-message--user' : 'siacasa-message--bot'}`;
-
-            const time = formatTime();
-
-            // Procesar el mensaje con Markdown si viene del bot
-            let messageContent = message;
-            if (!isUser) {
-                try {
-                    // Intentar usar el procesador avanzado primero
-                    messageContent = await processMarkdownAdvanced(message);
-                } catch (error) {
-                    // Fallback al procesador simple si hay error
-                    console.error('Error en procesador avanzado, usando simple:', error);
-                    messageContent = processMarkdownSimple(message);
-                }
-            }
-
-            messageDiv.innerHTML = `
-                <div>${messageContent}</div>
-                <div class="siacasa-message__time">${time}</div>
-            `;
-
-            messagesContainer.appendChild(messageDiv);
-
-            // Scroll al final
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        // Cerrar lista si terminó el texto y aún estamos en una lista
+        if (inList) {
+            processedLines.push("</ol>");
         }
 
-        // Mostrar indicador de escritura
-        function showTypingIndicator() {
-            typingIndicator.style.display = 'flex';
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        processed = processedLines.join("\n");
+
+        // Paso 3: Procesar texto en negrita (**texto**)
+        processed = processed.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+
+        // Paso 4: Procesar texto en cursiva (*texto*)
+        processed = processed.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+
+        // Paso 5: Procesar saltos de línea
+        processed = processed.replace(/\n/g, "<br>");
+
+        return processed;
+    }
+
+    // ======== ELEMENTOS DEL WIDGET ========
+
+    /**
+     * Crea los elementos del widget
+     * @returns {HTMLElement} - Elemento del widget
+     */
+    function createChatWidget() {
+        // Contenedor principal
+        const widget = document.createElement("div");
+        widget.id = "siacasa-widget";
+        widget.className = "siacasa-widget siacasa-widget--closed";
+
+        // Botón de chat (visible cuando está cerrado)
+        const chatButton = document.createElement("button");
+        chatButton.className = "siacasa-widget__button";
+        chatButton.innerHTML = `
+            <span class="siacasa-widget__icon">
+                ${iconSet.chat}
+            </span>
+            <span class="siacasa-widget__label">Asistente</span>
+        `;
+
+        // Panel de chat (oculto inicialmente)
+        const chatPanel = document.createElement("div");
+        chatPanel.className = "siacasa-widget__panel";
+        chatPanel.innerHTML = `
+            <div class="siacasa-widget__header">
+                <button class="siacasa-widget__back">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                </button>
+                <div class="siacasa-widget__info">
+                    <div class="siacasa-widget__avatar">
+                        <div class="siacasa-widget__avatar-circle">
+                            ${iconSet.bot}
+                        </div>
+                        <div class="siacasa-widget__verify"></div>
+                    </div>
+                    <div class="siacasa-widget__title-container">
+                        <h3 class="siacasa-widget__title">${config.botName}</h3>
+                        <p class="siacasa-widget__subtitle">${config.botSubtitle}</p>
+                    </div>
+                </div>
+                <button class="siacasa-widget__close">
+                    ${iconSet.close}
+                </button>
+            </div>
+            <div class="siacasa-widget__messages" id="siacasaMessages"></div>
+            <div class="siacasa-widget__typing-indicator" id="siacasaTyping">
+                <div class="typing-bubble"></div>
+                <div class="typing-bubble"></div>
+                <div class="typing-bubble"></div>
+            </div>
+            <div class="siacasa-widget__input-container">
+                <div class="siacasa-widget__input">
+                    <input type="text" placeholder="Escribe tu mensaje aquí..." id="siacasaInput">
+                    <button id="siacasaSend" class="siacasa-widget__send">
+                        ${iconSet.send}
+                    </button>
+                </div>
+            </div>
+        `;
+
+        // Añadir elementos al widget
+        widget.appendChild(chatButton);
+        widget.appendChild(chatPanel);
+
+        return widget;
+    }
+
+    // ======== MANEJO DE SESIÓN ========
+
+    /**
+     * Inicializa el control de sesiones
+     */
+    function initSessionHandling() {
+        // Recuperar ID de usuario existente o crear uno nuevo
+        sessionId = localStorage.getItem("siacasa_session_id");
+        if (!sessionId) {
+            sessionId = generateUUID();
+            localStorage.setItem("siacasa_session_id", sessionId);
+        }
+        console.log("Usando ID de sesión:", sessionId);
+
+        // Configurar reinicio de temporizador de inactividad en cada acción del usuario
+        document.addEventListener("click", resetInactivityTimer);
+        document.addEventListener("keypress", resetInactivityTimer);
+
+        // Manejar cierre de página
+        window.addEventListener("beforeunload", handleBeforeUnload);
+    }
+
+    /**
+     * Resetea el temporizador de inactividad
+     */
+    function resetInactivityTimer() {
+        // Limpiar temporizador existente
+        if (activityTimeout) {
+            clearTimeout(activityTimeout);
         }
 
-        // Ocultar indicador de escritura
-        function hideTypingIndicator() {
-            typingIndicator.style.display = 'none';
-        }
-
-        /**
-         * Inicializa el control de sesiones
-         */
-        function initSessionHandling() {
-            // Recuperar ID de usuario existente o crear uno nuevo
-            sessionId = localStorage.getItem('siacasa_session_id');
-            if (!sessionId) {
-                sessionId = generateUUID();
-                localStorage.setItem('siacasa_session_id', sessionId);
-            }
-            console.log("Usando ID de sesión:", sessionId);
-
-            // Manejar evento de cierre para finalizar la sesión
-         
-
-            // Configurar reinicio de temporizador de inactividad en cada acción del usuario
-            document.addEventListener('click', resetInactivityTimer);
-            document.addEventListener('keypress', resetInactivityTimer);
-        }
-
-        /**
-         * Reinicia el temporizador de inactividad
-         */
-        function resetInactivityTimer() {
-            // Limpiar temporizador existente
-            if (activityTimeout) {
-                clearTimeout(activityTimeout);
-            }
-
-            // Establecer nuevo temporizador
-            activityTimeout = setTimeout(function () {
-                // Finalizar sesión por inactividad
-                if (sessionId && currentSessionId) {
-                    fetch(config.apiEndpoint.replace('/mensaje', '/finalizar-sesion'), {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            usuario_id: sessionId
-                        })
-                    })
-                        .then(response => response.json())
-                        .then(data => {
-                            console.log("Sesión finalizada por inactividad:", currentSessionId);
-                            currentSessionId = null;
-                        })
-                        .catch(error => {
-                            console.error("Error al finalizar sesión por inactividad:", error);
-                        });
-                }
-            }, INACTIVITY_TIMEOUT);
-        }
-
-        // Enviar mensaje al backend
-        async function sendMessage(message) {
-            try {
-                showTypingIndicator();
-
-                // Extraer dominio para identificar el banco
-                const currentDomain = window.location.hostname;
-
-                // Determinar banco según dominio (basado en allowed_domains en bank_configs)
-                let bankCode = 'default'; // Valor por defecto
-
-                // Verificar si estamos en un dominio del Banco de la Nación
-                if (currentDomain.includes('bn.com.pe') || currentDomain.includes('localhost')) {
-                    bankCode = 'bn';
-                }
-                // Verificar si estamos en un dominio del BCP
-                else if (currentDomain.includes('viabcp.com')) {
-                    bankCode = 'bcp';
-                }
-
-                // Enviar mensaje a la API
-                const response = await fetch(config.apiEndpoint, {
-                    method: 'POST',
+        // Establecer nuevo temporizador
+        activityTimeout = setTimeout(function () {
+            // Finalizar sesión por inactividad
+            if (sessionId && currentSessionId) {
+                fetch(config.apiEndpoint.replace("/mensaje", "/finalizar-sesion"), {
+                    method: "POST",
                     headers: {
-                        'Content-Type': 'application/json'
+                        "Content-Type": "application/json",
                     },
                     body: JSON.stringify({
-                        mensaje: message,
-                        usuario_id: sessionId,  // Enviar ID de usuario
-                        bank_code: bankCode     // Enviar código de banco
+                        usuario_id: sessionId,
+                    }),
+                })
+                    .then((response) => response.json())
+                    .then((data) => {
+                        console.log("Sesión finalizada por inactividad:", currentSessionId);
+                        currentSessionId = null;
                     })
-                });
-
-                const data = await response.json();
-
-                hideTypingIndicator();
-
-                if (data.status === 'success') {
-                    addMessage(data.respuesta, false);
-
-                    // Si la respuesta incluye un ID de usuario, actualizarlo
-                    if (data.usuario_id) {
-                        sessionId = data.usuario_id;
-                        localStorage.setItem('siacasa_session_id', sessionId);
-                    }
-                } else {
-                    throw new Error(data.error || 'Error desconocido');
-                }
-            } catch (error) {
-                console.error('Error en la comunicación con el chatbot:', error);
-
-                hideTypingIndicator();
-
-                addMessage('Lo siento, ha ocurrido un error en la comunicación. Por favor, intenta de nuevo más tarde.', false);
+                    .catch((error) => {
+                        console.error("Error al finalizar sesión por inactividad:", error);
+                    });
             }
+        }, INACTIVITY_TIMEOUT);
+    }
+
+    /**
+     * Maneja el evento beforeunload para finalizar la sesión
+     */
+    function handleBeforeUnload() {
+        if (sessionId && currentSessionId) {
+            const data = JSON.stringify({
+                usuario_id: sessionId,
+            });
+
+            // Crear un Blob con el tipo MIME correcto
+            const blob = new Blob([data], {
+                type: "application/json",
+            });
+
+            // Usar sendBeacon con el Blob
+            navigator.sendBeacon(
+                config.apiEndpoint.replace("/mensaje", "/finalizar-sesion"),
+                blob
+            );
+
+            console.log("Sesión finalizada al cerrar página:", currentSessionId);
         }
+    }
 
-        // Manejar envío de mensaje
-        function handleSendMessage() {
-            const message = inputField.value.trim();
-            if (!message) return;
+    // ======== SOCKET.IO ========
 
-            // Añadir mensaje del usuario
-            addMessage(message, true);
+    /**
+     * Inicializa la conexión Socket.IO
+     */
+    function initSocketConnection() {
+        try {
+            // Verificar si io está definido
+            if (typeof io === "undefined") {
+                console.warn("La biblioteca Socket.IO no está disponible");
+                return;
+            }
 
-            // Limpiar campo de entrada
-            inputField.value = '';
+            // Construir la URL del servidor Socket.IO
+            const socketUrl = `${window.location.protocol}//${serverHost}:${serverPort}`;
+            console.log(`Conectando a Socket.IO: ${socketUrl}`);
 
-            // Enviar mensaje al backend
-            sendMessage(message);
+            // Inicializar Socket.IO
+            socket = io(socketUrl, {
+                transports: ["websocket", "polling"],
+                reconnection: true,
+                reconnectionAttempts: 5,
+                reconnectionDelay: 1000,
+                timeout: 20000,
+            });
+            console.log('Socket.IO inicializado:', socket);
+            // Configurar eventos
+            setupSocketEvents();
+        } catch (error) {
+            console.error("Error al inicializar Socket.IO:", error);
         }
+    }
 
-        // Eventos de envío
-        sendButton.addEventListener('click', handleSendMessage);
+    /**
+     * Configura los eventos de Socket.IO
+     */
+    function setupSocketEvents() {
+        console.log('Configurando eventos Socket.IO');
+        if (!socket) return;
 
-        inputField.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                handleSendMessage();
+        socket.on("connect", () => {
+            console.log("Conectado a Socket.IO");
+
+            // Si hay un ticket activo, suscribirse
+            if (activeTicketId) {
+                socket.emit("subscribe_ticket", {
+                    ticket_id: activeTicketId,
+                    role: "user",
+                });
+            }
+
+            // Suscribirse como usuario
+            socket.emit("subscribe_user", {
+                user_id: sessionId,
+            });
+        });
+
+        socket.on("disconnect", () => {
+            console.log("Desconectado de Socket.IO");
+        });
+
+        socket.on("connect_error", (error) => {
+            console.error("Error de conexión Socket.IO:", error);
+        });
+
+        socket.on('chat_message', async function(data) {
+            console.log('Mensaje recibido por socket:', data);
+            
+            // Si recibimos un ticket_id por primera vez, suscribirnos a ese ticket
+            if (data.ticket_id && !activeTicketId) {
+                activeTicketId = data.ticket_id;
+                console.log('Nuevo ticket asignado, suscribiéndose:', activeTicketId);
+                
+                // Suscribirse al ticket
+                socket.emit('subscribe_ticket', {
+                    ticket_id: activeTicketId,
+                    role: 'user'
+                });
+            }
+            
+            // Procesar el mensaje si es del agente y no es interno
+            if (data.sender_type === 'agent' && !data.is_internal) {
+                hideTypingIndicator();
+                await addMessage(data.content, false);
             }
         });
 
-        // Exponer funciones útiles al ámbito global para debugging o extensibilidad
-        window.__siacasa_widget = {
-            addMessage: addMessage,
-            showTypingIndicator: showTypingIndicator,
-            hideTypingIndicator: hideTypingIndicator,
-            sendMessage: sendMessage
-        };
+        socket.on('direct_message', async function(data) {
+            console.log('Mensaje directo recibido:', data);
+            
+            if (data.sender_type === 'agent' && !data.is_internal) {
+                hideTypingIndicator();
+                await addMessage(data.content, false);
+            }
+        });
 
-        // Disparar evento de widget cargado
-        const widgetLoadedEvent = new CustomEvent('siacasa-widget-loaded');
-        window.dispatchEvent(widgetLoadedEvent);
+        socket.on("typing", (data) => {
+            if (data.sender_type === "agent" && data.is_typing) {
+                showTypingIndicator();
+            } else {
+                hideTypingIndicator();
+            }
+        });
 
-        // Inicializar conexión de socket
-        initSocketConnection();
+        socket.on('agent_connected', function(data) {
+            console.log('Agente conectado al ticket:', data);
+            // Opcionalmente mostrar mensaje al usuario
+            addMessage('Un agente se ha conectado a la conversación.', false);
+        });
 
-        // Iniciar polling para nuevos mensajes
-        setInterval(pollForNewMessages, 5000);
+        socket.on('error', function(error) {
+            console.error('Error en Socket.IO:', error);
+        });
+
+        socket.on('reconnect', function() {
+            console.log('Socket.IO reconectado');
+            
+            // Volver a suscribirse al ticket si teníamos uno activo
+            if (activeTicketId) {
+                console.log('Volviendo a suscribirse al ticket:', activeTicketId);
+                socket.emit('subscribe_ticket', {
+                    ticket_id: activeTicketId,
+                    role: 'user'
+                });
+            }
+            
+            // También volver a suscribirse como usuario
+            socket.emit('subscribe_user', {
+                user_id: sessionId
+            });
+        });
+        
     }
 
-    // Cargar librerías primero y luego inicializar para asegurar que todo funcione
-    async function loadAndInitialize() {
-        try {
-            // Precargar las bibliotecas para procesamiento Markdown
-            await Promise.all([
-                loadMarkedLibrary(),
-                loadDOMPurify()
-            ]).catch(err => {
-                console.warn('No se pudieron cargar algunas bibliotecas, continuando con funcionalidad reducida', err);
-            });
+    // ======== FUNCIONES PRINCIPALES ========
 
-            // Inicializar el widget
-            initWidget();
-        } catch (error) {
-            console.error('Error al inicializar el widget:', error);
-            // Intentar inicializar sin las funciones avanzadas
-            initWidget();
+    /**
+     * Añade un mensaje al chat
+     * @param {string} message - Mensaje a añadir
+     * @param {boolean} isUser - Indica si el mensaje es del usuario
+     */
+    async function addMessage(message, isUser) {
+        if (!messagesContainer) return;
+
+        const messageDiv = document.createElement("div");
+        messageDiv.className = `siacasa-message ${isUser ? "siacasa-message--user" : "siacasa-message--bot"
+            }`;
+
+        const time = formatTime();
+
+        // Procesar el mensaje con Markdown si viene del bot
+        let messageContent = message;
+        if (!isUser) {
+            try {
+                // Procesar con Markdown
+                messageContent = await processMarkdown(message);
+            } catch (error) {
+                console.error("Error al procesar mensaje:", error);
+                messageContent = message; // Usar texto sin formato en caso de error
+            }
+        }
+
+        messageDiv.innerHTML = `
+            <div>${messageContent}</div>
+            <div class="siacasa-message__time">${time}</div>
+        `;
+
+        messagesContainer.appendChild(messageDiv);
+
+        // Scroll al final
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    /**
+     * Muestra el indicador de escritura
+     */
+    function showTypingIndicator() {
+        if (typingIndicator) {
+            typingIndicator.style.display = "flex";
+            if (messagesContainer) {
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
         }
     }
 
-    // Esperar a que el DOM esté cargado por completo
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', loadAndInitialize);
-    } else {
-        // Pequeño retraso para asegurar que todo esté configurado
-        setTimeout(loadAndInitialize, 100);
+    /**
+     * Oculta el indicador de escritura
+     */
+    function hideTypingIndicator() {
+        if (typingIndicator) {
+            typingIndicator.style.display = "none";
+        }
     }
 
-    // Manejar evento de cierre para finalizar la sesión
-    window.addEventListener('beforeunload', function() {
-        if (sessionId && currentSessionId) {
-            // El problema: sendBeacon no configura correctamente los headers
-            // Solución: crear un Blob con el tipo MIME correcto
-            const data = JSON.stringify({
-                usuario_id: sessionId
-            });
-            
-            // Crear un Blob con el tipo MIME correcto
-            const blob = new Blob([data], {
-                type: 'application/json'
-            });
-            
-            // Usar sendBeacon con el Blob
-            navigator.sendBeacon(
-                config.apiEndpoint.replace('/mensaje', '/finalizar-sesion'), 
-                blob
-            );
-            
-            console.log("Sesión finalizada al cerrar página:", currentSessionId);
-        }
-    });
-
-    // Inicializar conexión de socket
-    async function initSocketConnection() {
+    /**
+     * Envía un mensaje al backend
+     * @param {string} message - Mensaje a enviar
+     */
+    async function sendMessage(message) {
         try {
-            // Asegurar que Socket.IO esté cargado
-            const socket = io('http://localhost:3200', {
-                query: {
-                    user_id: sessionId,
-                    ticket_id: activeTicketId
+            showTypingIndicator();
+
+            // Determinar banco según dominio
+            const bankCode = getBankCode();
+
+            // Intentar enviar por Socket.IO primero si está disponible
+            if (socket && socket.connected && activeTicketId) {
+                console.log("Enviando mensaje por Socket.IO");
+                socket.emit("chat_message", {
+                    ticket_id: activeTicketId,
+                    content: message,
+                    sender_id: sessionId,
+                    sender_type: "user",
+                });
+
+                // El mensaje del agente será recibido por el evento 'chat_message'
+                return;
+            }
+
+            // Fallback a método HTTP si Socket.IO no está disponible
+            const response = await fetch(config.apiEndpoint, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
                 },
-                transports: ['websocket', 'polling']
+                body: JSON.stringify({
+                    mensaje: message,
+                    usuario_id: sessionId,
+                    bank_code: bankCode,
+                }),
             });
 
-            socket.on('connect', function() {
-                console.log('Socket.IO conectado con ID:', socket.id);
-                
-                // Suscribirse explícitamente al ticket activo si existe
-                if (activeTicketId) {
-                    console.log('Suscribiéndose al ticket:', activeTicketId);
-                    socket.emit('subscribe_ticket', {
-                        ticket_id: activeTicketId,
-                        role: 'user'
-                    });
+            const data = await response.json();
+
+            hideTypingIndicator();
+
+            if (data.status === "success") {
+                await addMessage(data.respuesta, false);
+
+                // Si la respuesta incluye un ID de usuario, actualizarlo
+                if (data.usuario_id) {
+                    sessionId = data.usuario_id;
+                    localStorage.setItem("siacasa_session_id", sessionId);
                 }
-            });
 
-            // Añadir log para debuguear los mensajes entrantes
-            socket.on('chat_message', function(data) {
-                console.log('Mensaje recibido:', data);
-                if (data.sender_type === 'agent') {
-                    addMessage(data.content, false);
+                // Si hay un ticket asignado, guardarlo
+                if (data.ticket_id && !activeTicketId) {
+                    activeTicketId = data.ticket_id;
+                    console.log(`Ticket ID asignado: ${activeTicketId}`);
+
+                    // Suscribirse al ticket si Socket.IO está disponible
+                    if (socket && socket.connected) {
+                        socket.emit("subscribe_ticket", {
+                            ticket_id: activeTicketId,
+                            role: "user",
+                        });
+                    }
                 }
-            });
-
-            // Añadir manejador para todos los eventos para debug
-            socket.onAny((event, ...args) => {
-                console.log(`Evento Socket.IO recibido: ${event}`, args);
-            });
+            } else {
+                throw new Error(data.error || "Error desconocido");
+            }
         } catch (error) {
-            console.error('Error al inicializar Socket.IO:', error);
+            console.error("Error en la comunicación con el chatbot:", error);
+            hideTypingIndicator();
+            await addMessage(
+                "Lo siento, ha ocurrido un error en la comunicación. Por favor, intenta de nuevo más tarde.",
+                false
+            );
         }
     }
 
-    // Polling para nuevos mensajes
+    /**
+     * Realiza polling para nuevos mensajes
+     */
     function pollForNewMessages() {
         if (!sessionId || !activeTicketId) return;
-        
-        console.log(`Realizando polling de mensajes. Último mensaje: ${lastMessageTimestamp}`);
-        
-        // Usar la misma base URL que la API
-        fetch(`/api/mensajes?usuario_id=${sessionId}&ticket_id=${activeTicketId}&ultimo_mensaje=${lastMessageTimestamp}`)
-            .then(response => {
+
+        // Solo hacer polling si Socket.IO no está disponible
+        if (socket && socket.connected) return;
+
+        console.log(
+            `Realizando polling de mensajes. Último mensaje: ${lastMessageTimestamp}`
+        );
+
+        fetch(
+            `/api/mensajes?usuario_id=${sessionId}&ticket_id=${activeTicketId}&ultimo_mensaje=${lastMessageTimestamp}`
+        )
+            .then((response) => {
                 if (!response.ok) {
                     throw new Error(`Error de servidor: ${response.status}`);
                 }
                 return response.json();
             })
-            .then(data => {
-                if (data.status === 'success' && data.mensajes && Array.isArray(data.mensajes)) {
-                    console.log(`Polling: ${data.mensajes.length} mensajes nuevos encontrados`);
-                    
-                    data.mensajes.forEach(msg => {
+            .then((data) => {
+                if (
+                    data.status === "success" &&
+                    data.mensajes &&
+                    Array.isArray(data.mensajes)
+                ) {
+                    console.log(
+                        `Polling: ${data.mensajes.length} mensajes nuevos encontrados`
+                    );
+
+                    data.mensajes.forEach(async (msg) => {
                         // Solo procesar mensajes que no hemos mostrado antes
                         const msgTimestamp = new Date(msg.timestamp).getTime();
                         if (msgTimestamp > lastMessageTimestamp) {
-                            if (msg.sender_type === 'agent') {
-                                addMessage(msg.content, false);
+                            if (msg.sender_type === "agent") {
+                                await addMessage(msg.content, false);
                             }
-                            
+
                             // Actualizar timestamp del último mensaje
                             lastMessageTimestamp = msgTimestamp;
                         }
                     });
                 }
             })
-            .catch(error => {
-                console.warn('Error en polling de mensajes:', error);
+            .catch((error) => {
+                console.warn("Error en polling de mensajes:", error);
             });
     }
 
+    // ======== INICIALIZACIÓN ========
+
+    /**
+     * Inicializa el widget
+     */
+    async function initWidget() {
+        try {
+            // Recuperar o generar sessionId
+            sessionId = localStorage.getItem("siacasa_session_id");
+            if (!sessionId) {
+                sessionId = generateUUID();
+                localStorage.setItem("siacasa_session_id", sessionId);
+            }
+
+            // Añadir estilos
+            addStyles();
+
+            // Crear y añadir el widget al DOM
+            const widget = createChatWidget();
+            document.body.appendChild(widget);
+
+            // Obtener elementos del DOM
+            messagesContainer = document.getElementById("siacasaMessages");
+            typingIndicator = document.getElementById("siacasaTyping");
+            const chatButton = widget.querySelector(".siacasa-widget__button");
+            const closeButton = widget.querySelector(".siacasa-widget__close");
+            const backButton = widget.querySelector(".siacasa-widget__back");
+            const sendButton = document.getElementById("siacasaSend");
+            const inputField = document.getElementById("siacasaInput");
+
+            // Clave única para localStorage basada en el usuario y el día
+            const todayKey = new Date().toISOString().split("T")[0]; // Formato: YYYY-MM-DD
+            const storageKey = `siacasa_greeted_${sessionId}_${todayKey}`;
+
+            // Verificar si ya se mostró el mensaje inicial hoy para esta sesión
+            const wasGreetedToday = localStorage.getItem(storageKey);
+
+            if (!wasGreetedToday) {
+                // Añadir mensaje inicial del bot
+                await addMessage(config.initialMessage, false);
+                // Guardar en localStorage que ya se mostró el mensaje
+                localStorage.setItem(storageKey, "true");
+            } else {
+                // Verificar si hay mensajes anteriores en el historial
+                const hasMessages = messagesContainer.children.length > 0;
+                // Si no hay mensajes (primera vez que se abre), mostrar mensaje inicial
+                if (!hasMessages) {
+                    await addMessage(config.initialMessage, false);
+                }
+            }
+
+            // Abrir chat
+            chatButton.addEventListener("click", () => {
+                widget.classList.remove("siacasa-widget--closed");
+                // Focus en el input cuando se abre el chat
+                setTimeout(() => inputField.focus(), 300);
+            });
+
+            // Cerrar chat
+            closeButton.addEventListener("click", () => {
+                widget.classList.add("siacasa-widget--closed");
+            });
+
+            // Botón atrás (igual que cerrar en versión móvil)
+            backButton.addEventListener("click", () => {
+                widget.classList.add("siacasa-widget--closed");
+            });
+
+            // Manejar envío de mensaje
+            function handleSendMessage() {
+                const message = inputField.value.trim();
+                if (!message) return;
+
+                // Añadir mensaje del usuario
+                addMessage(message, true);
+
+                // Limpiar campo de entrada
+                inputField.value = "";
+
+                // Enviar mensaje al backend
+                sendMessage(message);
+
+                // Reiniciar temporizador de inactividad
+                resetInactivityTimer();
+            }
+
+            // Eventos de envío
+            sendButton.addEventListener("click", handleSendMessage);
+
+            inputField.addEventListener("keypress", (e) => {
+                if (e.key === "Enter") {
+                    handleSendMessage();
+                }
+            });
+
+            // Inicializar manejo de sesión
+            initSessionHandling();
+
+            // Cargar Socket.IO y luego inicializar la conexión
+            try {
+                loadLibrary("https://cdn.socket.io/4.6.0/socket.io.min.js", {
+                    checkGlobal: "io",
+                    integrity:
+                        "sha384-c79GN5VsunZvi+Q/WObgk2in0CbZsHnjEqvFxC5DxHn9lTfNce2WW6h2pH6u/kF+",
+                    fallbackUrl: "https://cdn.socket.io/4.6.0/socket.io.min.js",
+                })
+                    .then(() => {
+                        initSocketConnection();
+                    })
+                    .catch((err) => {
+                        console.warn(
+                            "No se pudo cargar Socket.IO, usando polling fallback"
+                        );
+                    });
+            } catch (error) {
+                console.warn("Error al cargar Socket.IO:", error);
+            }
+
+            // Iniciar polling para nuevos mensajes
+            setInterval(pollForNewMessages, POLLING_INTERVAL);
+
+            // Exponer funciones útiles al ámbito global para debugging o extensibilidad
+            window.__siacasa_widget = {
+                addMessage,
+                showTypingIndicator,
+                hideTypingIndicator,
+                sendMessage,
+            };
+
+            // Disparar evento de widget cargado
+            const widgetLoadedEvent = new CustomEvent("siacasa-widget-loaded");
+            window.dispatchEvent(widgetLoadedEvent);
+
+            console.log("Widget inicializado correctamente");
+        } catch (error) {
+            console.error("Error al inicializar el widget:", error);
+        }
+    }
+
+    // Esperar a que el DOM esté cargado por completo
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", initWidget);
+    } else {
+        // Pequeño retraso para asegurar que todo esté configurado
+        setTimeout(initWidget, 100);
+    }
 })();

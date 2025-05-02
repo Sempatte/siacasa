@@ -172,7 +172,9 @@
                 
                 <!-- Formulario de Envío de Mensajes -->
                 <div class="chat-input p-3 border-top">
-                    <form id="messageForm" action="{{ url_for('support.send_message', ticket_id=ticket.id) }}" method="POST">
+                    <form id="messageForm" action="{{ url_for('support.send_message', ticket_id=ticket.id) }}" method="POST" data-ticket-id="{{ ticket.id }}" 
+                    data-agent-id="{{ websocket_info.agent_id }}" 
+                    data-agent-name="{{ websocket_info.agent_name }}">
                         <div class="d-flex gap-2">
                             <div class="flex-grow-1 position-relative">
                                 <textarea class="form-control" id="messageInput" name="message" placeholder="Escribe tu mensaje..." rows="2" required></textarea>

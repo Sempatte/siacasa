@@ -261,10 +261,13 @@ class ChatWebSocketServer:
             sender_type: Tipo de remitente ('agent' o 'user')
             is_internal: Indica si el mensaje es interno (solo visible para agentes)
         """
+        # Log detallado para depuración
+        logger.info(f"Distribuyendo mensaje - Ticket: {ticket_id}, Tipo: {sender_type}, Interno: {is_internal}")
+        
         # Generar ID de mensaje
         message_id = str(uuid.uuid4())
         timestamp = datetime.now().isoformat()
-        logger.info(f"Distribuyendo mensaje: ticket_id={ticket_id}, sender_type={sender_type}, is_internal={is_internal}")
+        
         # Crear mensaje
         message = {
             "type": "chat_message",
@@ -281,37 +284,60 @@ class ChatWebSocketServer:
         # Guardar mensaje en la base de datos si es de un agente
         if sender_type == "agent" and self.support_repository:
             try:
-                self.support_repository.agregar_mensaje_agente(
+                logger.info(f"Guardando mensaje en base de datos: {ticket_id}, {sender_id}, {sender_name}")
+                result = self.support_repository.agregar_mensaje_agente(
                     ticket_id, 
                     sender_id, 
                     sender_name, 
                     content, 
                     is_internal
                 )
+                logger.info(f"Mensaje guardado correctamente: {result}")
             except Exception as e:
-                logger.error(f"Error al guardar mensaje de agente: {e}", exc_info=True)
+                logger.error(f"Error al guardar mensaje: {e}", exc_info=True)
         
-        # Enviar a todos los suscriptores del ticket
-        if ticket_id in self.ticket_subscriptions:
-            for client_id in self.ticket_subscriptions[ticket_id]:
-                if client_id in self.clients:
-                    # No enviar mensajes internos a clientes de usuario
-                    if is_internal:
-                        # Verificar si el cliente es un agente
-                        ws = self.clients[client_id]
-                        # TODO: Implementar verificación de rol
-                        # Por ahora, asumimos que todos los clientes son agentes
-                        await ws.send(json.dumps(message))
-                    else:
-                        # Mensajes normales se envían a todos
-                        await self.clients[client_id].send(json.dumps(message))
+        # Obtener usuario asociado al ticket
+        user_id = None
+        try:
+            if ticket_id in self.ticket_users:
+                user_id = self.ticket_users[ticket_id]
+                logger.info(f"Usuario del ticket encontrado en caché: {user_id}")
+            else:
+                # Intentar obtener información del ticket desde la base de datos
+                if self.support_repository and hasattr(self.support_repository, 'db'):
+                    query = "SELECT user_id FROM support_tickets WHERE id = %s"
+                    result = self.support_repository.db.fetch_one(query, (ticket_id,))
+                    if result and 'user_id' in result:
+                        user_id = result['user_id']
+                        # Guardar en caché para futuras consultas
+                        self.ticket_users[ticket_id] = user_id
+                        logger.info(f"Usuario del ticket obtenido de la BD: {user_id}")
+        except Exception as e:
+            logger.error(f"Error al obtener usuario del ticket: {e}", exc_info=True)
         
-        # Si el mensaje es de un agente y no es interno, también notificar al usuario
-        if sender_type == "agent" and not is_internal:
-            # Obtener ID de usuario asociado al ticket
-            # TODO: Obtener el usuario_id del ticket desde el repositorio
-            # Por ahora, asumimos que no tenemos esta información
-            pass
+        # Log de la estructura de salida para debugging
+        logger.info(f"Mensaje a enviar: {message}")
+        
+        # 1. Emitir mensaje a la sala del ticket
+        ticket_room = f'ticket_{ticket_id}'
+        logger.info(f"Emitiendo mensaje a la sala: {ticket_room}")
+        await self.socketio.emit('chat_message', message, room=ticket_room, include_self=False)
+        
+        # 2. Si el mensaje no es interno, también enviarlo al usuario directamente
+        if not is_internal and user_id:
+            # Emitir a la sala del usuario
+            user_room = f'user_{user_id}'
+            logger.info(f"Emitiendo mensaje también a sala de usuario: {user_room}")
+            await self.socketio.emit('chat_message', message, room=user_room)
+            
+            # También enviar como mensaje directo si hay una conexión directa
+            if user_id in self.user_connections:
+                user_sid = self.user_connections[user_id]
+                logger.info(f"Enviando mensaje directo a usuario {user_id}, SID: {user_sid}")
+                await self.socketio.emit('direct_message', message, room=user_sid)
+                
+        # Log de confirmación
+        logger.info(f"Mensaje distribuido correctamente a ticket {ticket_id}")
     
     async def broadcast_typing(self, ticket_id, sender_id, sender_type, is_typing=True):
         """

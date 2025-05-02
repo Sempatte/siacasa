@@ -1,4 +1,5 @@
-# Fixed implementation for socketio_server.py
+# bot_siacasa/infrastructure/websocket/socketio_server.py
+
 import logging
 import json
 import uuid
@@ -23,11 +24,11 @@ class ChatSocketIOServer:
             app: Aplicación Flask (opcional)
             support_repository: Repositorio para persistencia de mensajes
         """
-        # No crear un objeto SocketIO aquí, solo referenciar el que se pasa
         self.socketio = None
         self.support_repository = support_repository
         self.user_connections = {}  # user_id -> session_id
         self.agent_connections = {}  # agent_id -> session_id
+        self.ticket_users = {}  # ticket_id -> user_id
         
         # Log when server is initialized
         logger.info("SocketIO server initialized")
@@ -45,6 +46,27 @@ class ChatSocketIOServer:
         """
         self.socketio = socketio
         self._register_handlers()
+        self._load_ticket_users()
+        
+    def _load_ticket_users(self):
+        """
+        Carga la relación entre tickets y usuarios desde la base de datos.
+        """
+        if not self.support_repository or not hasattr(self.support_repository, 'db'):
+            logger.warning("No se puede cargar relación ticket-usuario: no hay repositorio")
+            return
+            
+        try:
+            query = """
+            SELECT id, user_id FROM support_tickets
+            """
+            results = self.support_repository.db.fetch_all(query)
+            
+            for row in results:
+                self.ticket_users[row['id']] = row['user_id']
+                logger.info(f"Relación cargada: ticket {row['id']} -> usuario {row['user_id']}")
+        except Exception as e:
+            logger.error(f"Error al cargar relaciones ticket-usuario: {e}", exc_info=True)
         
     def _register_handlers(self):
         """
@@ -81,6 +103,19 @@ class ChatSocketIOServer:
             
             # Suscribir a la sala del ticket
             join_room(f'ticket_{ticket_id}')
+            
+            # Si este es un agente uniéndose, también enviar mensajes al usuario
+            if role == 'agent' and ticket_id in self.ticket_users:
+                user_id = self.ticket_users[ticket_id]
+                user_room = f'user_{user_id}'
+                
+                # Enviar notificación de conexión al usuario si está en línea
+                if user_id in self.user_connections:
+                    self.socketio.emit('agent_connected', {
+                        'ticket_id': ticket_id,
+                        'message': 'Un agente se ha conectado a tu conversación',
+                        'timestamp': datetime.now().isoformat()
+                    }, room=user_room)
             
             logger.info(f"Cliente {request.sid} suscrito al ticket {ticket_id} como {role}")
             
@@ -179,7 +214,6 @@ class ChatSocketIOServer:
                 # Guardar mensaje en la base de datos
                 if sender_type == "agent" and self.support_repository:
                     try:
-                        import traceback
                         logger.info(f"Intentando guardar mensaje de agente: {ticket_id}, {sender_id}, {sender_name}")
                         
                         if not hasattr(self.support_repository, 'agregar_mensaje_agente'):
@@ -199,19 +233,36 @@ class ChatSocketIOServer:
                         )
                         logger.info(f"Mensaje guardado correctamente: {result}")
                     except Exception as e:
-                        logger.error(f"Error al guardar mensaje de agente: {e}")
-                        logger.error(traceback.format_exc())
+                        logger.error(f"Error al guardar mensaje de agente: {e}", exc_info=True)
                         emit('error', {
                             'message': f'Error al guardar mensaje: {str(e)}',
                             'timestamp': datetime.now().isoformat()
                         })
                         return
                 
-                # Emitir mensaje a todos los suscriptores
-                room = f'ticket_{ticket_id}'
-                logger.info(f"Emitiendo mensaje a la sala {room}")
+                # Emitir mensaje a todos los suscriptores del ticket
+                ticket_room = f'ticket_{ticket_id}'
+                logger.info(f"Emitiendo mensaje a la sala {ticket_room}")
                 
-                emit('chat_message', message, room=room, include_self=False)
+                # Si el mensaje no es interno, también enviarlo al usuario directamente
+                if not is_internal and ticket_id in self.ticket_users:
+                    user_id = self.ticket_users[ticket_id]
+                    user_room = f'user_{user_id}'
+                    
+                    # También emitir a la sala del usuario (widget del chatbot)
+                    logger.info(f"Emitiendo mensaje también a la sala {user_room}")
+                    
+                    # Enviar tanto por socketio como al endpoint REST
+                    self.socketio.emit('chat_message', message, room=user_room)
+                    
+                    # Si hay conexión directa con el widget, intentar enviar directamente
+                    if user_id in self.user_connections:
+                        logger.info(f"Usuario {user_id} está conectado, enviando mensaje directo")
+                        user_sid = self.user_connections[user_id]
+                        self.socketio.emit('direct_message', message, room=user_sid)
+                
+                # Broadcast normal a todos en la sala del ticket
+                self.socketio.emit('chat_message', message, room=ticket_room, include_self=False)
                 
                 # Enviar confirmación al remitente
                 emit('message_sent', {
@@ -220,10 +271,11 @@ class ChatSocketIOServer:
                     'status': 'success'
                 })
                 
+                # Registrar mensaje enviado exitosamente
+                logger.info(f"Mensaje enviado correctamente a ticket {ticket_id}")
+                
             except Exception as e:
-                import traceback
-                logger.error(f"Error en handle_chat_message: {e}")
-                logger.error(traceback.format_exc())
+                logger.error(f"Error en handle_chat_message: {e}", exc_info=True)
                 emit('error', {
                     'message': f'Error en el servidor: {str(e)}',
                     'timestamp': datetime.now().isoformat()
@@ -254,7 +306,14 @@ class ChatSocketIOServer:
             }
             
             # Emitir a todos los suscriptores del ticket
-            emit('typing', message, room=f'ticket_{ticket_id}', include_self=False)
+            ticket_room = f'ticket_{ticket_id}'
+            self.socketio.emit('typing', message, room=ticket_room, include_self=False)
+            
+            # También enviar al usuario si es un agente escribiendo
+            if sender_type == 'agent' and ticket_id in self.ticket_users:
+                user_id = self.ticket_users[ticket_id]
+                user_room = f'user_{user_id}'
+                self.socketio.emit('typing', message, room=user_room)
     
     def run(self, app, host='0.0.0.0', port=3200, **kwargs):
         """
@@ -309,8 +368,16 @@ def init_socketio_server(app=None, support_repository=None):
     global socketio_server
     
     if socketio_server is None:
-        # Primero crear la instancia de SocketIO
-        socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
+        # Primero crear la instancia de SocketIO con configuración mejorada
+        socketio = SocketIO(
+            app, 
+            cors_allowed_origins="*",  # Permitir todos los orígenes 
+            async_mode='eventlet',
+            ping_timeout=60,
+            ping_interval=25,
+            logger=True,  # Habilitar logging detallado
+            engineio_logger=True  # Habilitar logging detallado de engineio
+        )
         
         # Luego crear el servidor con la clase wrapper
         socketio_server = ChatSocketIOServer(support_repository=support_repository)
@@ -320,15 +387,7 @@ def init_socketio_server(app=None, support_repository=None):
     
     return socketio_server
 
-def get_socketio_server():
-    """
-    Alias for get_websocket_server() for backward compatibility.
-    
-    Returns:
-        Instancia del servidor SocketIO o None si no se ha inicializado
-    """
-    return get_websocket_server()
-
+# AÑADIR ESTA FUNCIÓN QUE FALTA
 def get_websocket_server():
     """
     Obtiene la instancia global del servidor SocketIO.
@@ -337,3 +396,13 @@ def get_websocket_server():
         Instancia del servidor SocketIO o None si no se ha inicializado
     """
     return socketio_server
+
+# AÑADIR ESTA FUNCIÓN PARA COMPATIBILIDAD
+def get_socketio_server():
+    """
+    Alias para get_websocket_server() para mantener compatibilidad.
+    
+    Returns:
+        Instancia del servidor SocketIO o None si no se ha inicializado
+    """
+    return get_websocket_server()

@@ -228,8 +228,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Inicializar formularios de datos
-    initForms();
-    
     /**
      * Inicializa el comportamiento de formularios
      */
@@ -239,7 +237,97 @@ document.addEventListener('DOMContentLoaded', function() {
         
         forms.forEach(form => {
             form.addEventListener('submit', function(e) {
-                // Verificar si el formulario ya está en proceso de envío
+                // Verificar si es un formulario de chat y si estamos usando Socket.IO
+                const isChatForm = form.id === 'messageForm';
+                const isSocketAvailable = window.socket && window.socket.connected;
+                
+                // Si es un formulario de chat y Socket.IO está disponible, manejar de forma especial
+                if (isChatForm && isSocketAvailable) {
+                    e.preventDefault();
+                    
+                    // Obtener datos del mensaje
+                    const messageInput = document.getElementById('messageInput');
+                    const message = messageInput.value.trim();
+                    const isInternal = document.getElementById('internalMessage')?.checked || false;
+                    
+                    if (!message) return;
+                    
+                    // Obtener información del ticket y del agente
+                    const ticketId = form.getAttribute('data-ticket-id');
+                    const agentId = form.getAttribute('data-agent-id');
+                    const agentName = form.getAttribute('data-agent-name');
+                    
+                    if (!ticketId || !agentId) {
+                        console.error("Falta información de ticket o agente");
+                        return;
+                    }
+                    
+                    // Obtener botón submit
+                    const submitBtn = form.querySelector('button[type="submit"]');
+                    const originalText = submitBtn.innerHTML;
+                    
+                    // Cambiar botón a "Procesando..."
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Procesando...';
+                    
+                    // Emitir evento de mensaje a través de Socket.IO
+                    window.socket.emit('chat_message', {
+                        ticket_id: ticketId,
+                        content: message,
+                        sender_id: agentId,
+                        sender_name: agentName,
+                        sender_type: 'agent',
+                        is_internal: isInternal
+                    });
+                    
+                    // Escuchar confirmación de mensaje enviado
+                    window.socket.once('message_sent', function(data) {
+                        // Restaurar botón
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = originalText;
+                        
+                        // Limpiar formulario
+                        messageInput.value = '';
+                        if (document.getElementById('internalMessage')) {
+                            document.getElementById('internalMessage').checked = false;
+                        }
+                        
+                        // Hacer scroll hasta el final de la conversación
+                        if (window.scrollChatToBottom) {
+                            window.scrollChatToBottom();
+                        }
+                    });
+                    
+                    // Manejar errores - agregar un timeout por si no llega la confirmación
+                    setTimeout(() => {
+                        // Si el botón sigue deshabilitado después de 5 segundos, restaurarlo
+                        if (submitBtn.disabled) {
+                            submitBtn.disabled = false;
+                            submitBtn.innerHTML = originalText;
+                            console.warn("No se recibió confirmación del servidor. El mensaje podría no haberse enviado.");
+                            
+                            // Mostrar mensaje de error
+                            const errorMsg = document.createElement('div');
+                            errorMsg.className = 'alert alert-warning alert-dismissible fade show mt-2';
+                            errorMsg.innerHTML = `
+                                <strong>Advertencia:</strong> No se pudo confirmar el envío del mensaje. Por favor, inténtalo de nuevo.
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            `;
+                            form.appendChild(errorMsg);
+                            
+                            // Eliminar el mensaje después de 5 segundos
+                            setTimeout(() => {
+                                if (errorMsg.parentNode) {
+                                    errorMsg.parentNode.removeChild(errorMsg);
+                                }
+                            }, 5000);
+                        }
+                    }, 5000);
+                    
+                    return;
+                }
+                
+                // Verificar si el formulario ya está en proceso de envío (para formularios normales)
                 if (this.dataset.submitting === 'true') {
                     e.preventDefault();
                     return;
@@ -270,7 +358,6 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     }
-    
     /**
      * Muestra progreso de subida de archivos
      */
