@@ -28,6 +28,8 @@ from bot_siacasa.application.use_cases.procesar_mensaje_use_case import Procesar
 from bot_siacasa.domain.banks_config import BANK_CONFIGS
 from bot_siacasa.interfaces.web.web_app import WebApp
 from bot_siacasa.domain.entities.analisis_sentimiento import AnalisisSentimiento
+from bot_siacasa.infrastructure.db.support_repository import SupportRepository
+from bot_siacasa.infrastructure.websocket.socket_server import init_websocket_server
 
 def main():
     """Función principal para iniciar la aplicación."""
@@ -50,6 +52,14 @@ def main():
         repository = MemoryRepository()
         logger.info("Repositorio en memoria inicializado")
         
+        # Inicializar repositorio de soporte
+        support_repository = SupportRepository(db_connector)
+        logger.info("Repositorio de soporte inicializado")
+        
+         # Iniciar servidor WebSocket para chat en tiempo real
+        websocket_server = init_websocket_server(host="0.0.0.0", port=8765, support_repository=support_repository)
+        logger.info("Servidor WebSocket iniciado en 0.0.0.0:8765")
+        
         # Crear el proveedor de IA de OpenAI
         ai_provider = OpenAIProvider(
             api_key=openai_api_key,
@@ -66,7 +76,8 @@ def main():
             repository=repository,
             sentimiento_analyzer=sentimiento_analyzer,
             ai_provider=ai_provider,  # IMPORTANTE: pasar el proveedor de IA
-            bank_config=bank_config
+            bank_config=bank_config,
+            support_repository=support_repository  # Añadir repositorio de soporte
         )
         logger.info("Servicio de chatbot inicializado")
         

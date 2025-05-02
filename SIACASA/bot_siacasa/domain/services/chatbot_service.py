@@ -7,7 +7,9 @@ from bot_siacasa.domain.entities.mensaje import Mensaje
 from bot_siacasa.domain.entities.usuario import Usuario
 from bot_siacasa.domain.entities.conversacion import Conversacion
 from bot_siacasa.domain.entities.analisis_sentimiento import AnalisisSentimiento
+from bot_siacasa.domain.entities.ticket import Ticket, TicketStatus, EscalationReason
 from bot_siacasa.application.interfaces.repository_interface import IRepository
+from bot_siacasa.domain.services.escalation_service import EscalationService
 
 # Evitar importación circular
 if TYPE_CHECKING:
@@ -25,7 +27,8 @@ class ChatbotService:
 
    # Modificación para el constructor de ChatbotService
     def __init__(
-        self, repository: IRepository, sentimiento_analyzer, ai_provider=None, bank_config=None
+        self, repository: IRepository, sentimiento_analyzer, ai_provider=None, bank_config=None,
+        support_repository=None
     ):
         """
         Inicializa el servicio del chatbot.
@@ -35,15 +38,21 @@ class ChatbotService:
             sentimiento_analyzer: Analizador de sentimientos
             ai_provider: Proveedor de IA para generar respuestas
             bank_config: Configuración específica del banco
+            support_repository: Repositorio para tickets de soporte (opcional)
         """
         self.repository = repository
         self.sentimiento_analyzer = sentimiento_analyzer
         self.ai_provider = ai_provider  # Añadimos el proveedor de IA
+        self.support_repository = support_repository  # Repositorio para tickets de soporte
         default_config = {
                 "bank_name": "Banco",
                 "greeting": "Hola, soy SIACASA, tu asistente bancario virtual.",
                 "style": "formal"
             }
+        
+        self.escalation_service = None
+        if support_repository:
+            self.escalation_service = EscalationService(support_repository)
         self.bank_config = {**default_config, **(bank_config or {})}
         # Mensaje de sistema que define el comportamiento del chatbot
         self.mensaje_sistema = Mensaje(
@@ -215,6 +224,65 @@ class ChatbotService:
             Análisis de sentimiento
         """
         return self.sentimiento_analyzer.execute(texto)
+    
+    def check_for_escalation(self, mensaje_usuario: str, usuario_id: str) -> bool:
+        """
+        Verifica si es necesario escalar la conversación a un humano.
+        
+        Args:
+            mensaje_usuario: Texto del mensaje del usuario
+            usuario_id: ID del usuario
+            
+        Returns:
+            True si es necesario escalar, False en caso contrario
+        """
+        # Si no hay servicio de escalación, no se puede escalar
+        if not self.escalation_service:
+            return False
+        
+        # Obtener conversación activa
+        conversacion = self.obtener_o_crear_conversacion(usuario_id)
+        
+        # Verificar si debe escalar
+        should_escalate, reason = self.escalation_service.check_for_escalation(mensaje_usuario, conversacion)
+        
+        # Si debe escalar, crear ticket
+        if should_escalate and reason:
+            # Obtener usuario
+            usuario = self.repository.obtener_usuario(usuario_id)
+            
+            # Crear ticket
+            ticket = self.escalation_service.create_ticket(conversacion, usuario, reason)
+            
+            logger.info(f"Conversación escalada a humano. Ticket creado: {ticket.id}")
+            return True
+        
+        return False
+    
+    def esta_escalada(self, usuario_id: str) -> bool:
+        """
+        Verifica si la conversación ya ha sido escalada a un humano.
+        
+        Args:
+            usuario_id: ID del usuario
+            
+        Returns:
+            True si ya está escalada, False en caso contrario
+        """
+        # Si no hay servicio de escalación, no está escalada
+        if not self.escalation_service:
+            return False
+        
+        # Buscar tickets activos para este usuario
+        if hasattr(self.escalation_service.repository, 'obtener_tickets_por_usuario'):
+            tickets = self.escalation_service.repository.obtener_tickets_por_usuario(usuario_id)
+            
+            # Verificar si hay algún ticket activo (pendiente, asignado o activo)
+            for ticket in tickets:
+                if ticket.estado in [TicketStatus.PENDING, TicketStatus.ASSIGNED, TicketStatus.ACTIVE]:
+                    return True
+        
+        return False
 
       
     

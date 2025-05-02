@@ -334,7 +334,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         if (data.new > 0 && Notification.permission === 'granted') {
                             new Notification('SIACASA', {
                                 body: `Tienes ${data.new} nuevas notificaciones`,
-                                icon: '/static/img/logo.png'
+                                icon: '/static/img/bn_logo.png'
                             });
                         }
                     } else {

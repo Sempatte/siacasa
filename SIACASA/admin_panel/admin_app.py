@@ -10,6 +10,10 @@ from dotenv import load_dotenv
 from admin_panel.auth.auth_controller import auth_blueprint
 from admin_panel.training.training_controller import training_blueprint
 from admin_panel.auth.auth_middleware import login_required
+from admin_panel.auth.auth_controller import auth_blueprint
+from admin_panel.training.training_controller import training_blueprint
+from admin_panel.support.support_controller import support_blueprint
+from admin_panel.auth.auth_middleware import login_required
 
 # Importar conector de base de datos
 from bot_siacasa.infrastructure.db.neondb_connector import NeonDBConnector
@@ -65,8 +69,9 @@ class AdminPanel:
         os.makedirs(self.app.config['UPLOAD_FOLDER'], exist_ok=True)
         
         # Registrar blueprints
-        self.app.register_blueprint(auth_blueprint)
         self.app.register_blueprint(training_blueprint, url_prefix='/training')
+        self.app.register_blueprint(auth_blueprint)
+        self.app.register_blueprint(support_blueprint, url_prefix='/support')
         
         # Registrar rutas
         self._register_routes()

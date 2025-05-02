@@ -33,7 +33,7 @@
       <div class="sidebar-header">
         <div class="logo-container">
           <img
-            src="{{ url_for('static', filename='img/logo.png') }}"
+            src="{{ url_for('static', filename='img/bn_logo.png') }}"
             alt="SIACASA Logo"
             class="img-fluid"
           />
@@ -58,6 +58,15 @@
               href="{{ url_for('training.index') }}"
             >
               <i class="fas fa-robot me-2"></i> Entrenamiento
+            </a>
+          </li>
+          <li class="nav-item">
+            <a
+              class="nav-link {% if request.endpoint and request.endpoint.startswith('support') %}active{% endif %}"
+              href="{{ url_for('support.index') }}"
+            >
+              <i class="fas fa-headset me-2"></i> Soporte
+              <span class="badge bg-danger ms-2" id="pendingTicketsCount"></span>
             </a>
           </li>
           <li class="nav-item">

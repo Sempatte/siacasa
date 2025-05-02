@@ -1,0 +1,410 @@
+{% extends 'base.html' %}
+
+{% block title %}Soporte - Panel de Administración SIACASA{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Inicio</a></li>
+<li class="breadcrumb-item active" aria-current="page">Soporte</li>
+{% endblock %}
+
+{% block page_title %}Panel de Soporte{% endblock %}
+
+{% block page_actions %}
+<a href="{{ url_for('dashboard') }}" class="btn btn-outline-primary">
+    <i class="fas fa-tachometer-alt me-2"></i> Dashboard
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <!-- Resumen de Tickets -->
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card dashboard-card p-4 border-left-primary">
+            <div class="d-flex align-items-center">
+                <div class="card-icon bg-primary-light text-primary">
+                    <i class="fas fa-ticket-alt"></i>
+                </div>
+                <div>
+                    <div class="card-value">{{ stats.total_tickets }}</div>
+                    <div class="card-title">Tickets Totales</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tickets Pendientes -->
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card dashboard-card p-4 border-left-warning">
+            <div class="d-flex align-items-center">
+                <div class="card-icon bg-warning-light text-warning">
+                    <i class="fas fa-clock"></i>
+                </div>
+                <div>
+                    <div class="card-value">{{ stats.pending_tickets }}</div>
+                    <div class="card-title">Pendientes</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tickets en Proceso -->
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card dashboard-card p-4 border-left-info">
+            <div class="d-flex align-items-center">
+                <div class="card-icon bg-info-light text-info">
+                    <i class="fas fa-headset"></i>
+                </div>
+                <div>
+                    <div class="card-value">{{ stats.active_tickets + stats.assigned_tickets }}</div>
+                    <div class="card-title">En Proceso</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tickets Resueltos -->
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card dashboard-card p-4 border-left-success">
+            <div class="d-flex align-items-center">
+                <div class="card-icon bg-success-light text-success">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <div>
+                    <div class="card-value">{{ stats.resolved_tickets }}</div>
+                    <div class="card-title">Resueltos</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Tickets Pendientes -->
+    <div class="col-lg-6 mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                <h6 class="m-0 font-weight-bold text-primary">Tickets Pendientes</h6>
+                <span class="badge bg-warning">{{ pending_tickets|length }}</span>
+            </div>
+            <div class="card-body">
+                {% if pending_tickets %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Usuario</th>
+                                <th>Creado</th>
+                                <th>Prioridad</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for ticket in pending_tickets %}
+                            <tr>
+                                <td><a href="{{ url_for('support.ticket_details', ticket_id=ticket.id) }}" class="fw-bold">#{{ ticket.id[:8] }}</a></td>
+                                <td>{{ ticket.usuario.nombre or 'Usuario ' + ticket.usuario.id[:8] }}</td>
+                                <td>{{ ticket.fecha_creacion.strftime('%d/%m/%Y %H:%M') }}</td>
+                                <td>
+                                    {% if ticket.prioridad == 5 %}
+                                    <span class="badge bg-danger">Urgente</span>
+                                    {% elif ticket.prioridad == 4 %}
+                                    <span class="badge bg-warning">Alta</span>
+                                    {% elif ticket.prioridad == 3 %}
+                                    <span class="badge bg-primary">Media</span>
+                                    {% elif ticket.prioridad == 2 %}
+                                    <span class="badge bg-info">Baja</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Normal</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="btn-group">
+                                        <a href="{{ url_for('support.ticket_details', ticket_id=ticket.id) }}" class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        <a href="{{ url_for('support.live_chat', ticket_id=ticket.id) }}" class="btn btn-sm btn-success">
+                                            <i class="fas fa-comments"></i> Atender
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <div class="mb-3">
+                        <i class="fas fa-check-circle fa-3x text-success"></i>
+                    </div>
+                    <h5 class="text-muted">No hay tickets pendientes</h5>
+                    <p class="text-muted">¡Todos los tickets han sido atendidos!</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tickets Asignados -->
+    <div class="col-lg-6 mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                <h6 class="m-0 font-weight-bold text-primary">Mis Tickets</h6>
+                <span class="badge bg-info">{{ assigned_tickets|length }}</span>
+            </div>
+            <div class="card-body">
+                {% if assigned_tickets %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Usuario</th>
+                                <th>Estado</th>
+                                <th>Asignado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for ticket in assigned_tickets %}
+                            <tr>
+                                <td><a href="{{ url_for('support.ticket_details', ticket_id=ticket.id) }}" class="fw-bold">#{{ ticket.id[:8] }}</a></td>
+                                <td>{{ ticket.usuario.nombre or 'Usuario ' + ticket.usuario.id[:8] }}</td>
+                                <td>
+                                    {% if ticket.estado.value == 'active' %}
+                                    <span class="badge bg-primary">Activo</span>
+                                    {% elif ticket.estado.value == 'assigned' %}
+                                    <span class="badge bg-info">Asignado</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">{{ ticket.estado.value }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ ticket.fecha_asignacion.strftime('%d/%m/%Y %H:%M') if ticket.fecha_asignacion else '-' }}</td>
+                                <td>
+                                    <div class="btn-group">
+                                        <a href="{{ url_for('support.ticket_details', ticket_id=ticket.id) }}" class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        <a href="{{ url_for('support.live_chat', ticket_id=ticket.id) }}" class="btn btn-sm btn-primary">
+                                            <i class="fas fa-comments"></i> Chat
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <div class="mb-3">
+                        <i class="fas fa-inbox fa-3x text-muted"></i>
+                    </div>
+                    <h5 class="text-muted">No tienes tickets asignados</h5>
+                    <p class="text-muted">Puedes tomar tickets pendientes de la lista de la izquierda</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Estadísticas y Gráficos -->
+<div class="row">
+    <div class="col-lg-12">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Estadísticas de Soporte</h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3 mb-4">
+                        <div class="stat-card text-center p-4 rounded bg-light">
+                            <div class="stat-icon mb-2">
+                                <i class="fas fa-clock text-primary fa-2x"></i>
+                            </div>
+                            <div class="stat-value">{{ stats.avg_resolution_time|round|int }} min</div>
+                            <div class="stat-label">Tiempo promedio de resolución</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-4">
+                        <div class="stat-card text-center p-4 rounded bg-light">
+                            <div class="stat-icon mb-2">
+                                <i class="fas fa-ticket-alt text-info fa-2x"></i>
+                            </div>
+                            <div class="stat-value">{{ stats.tickets_today }}</div>
+                            <div class="stat-label">Tickets hoy</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-4">
+                        <div class="stat-card text-center p-4 rounded bg-light">
+                            <div class="stat-icon mb-2">
+                                <i class="fas fa-check-circle text-success fa-2x"></i>
+                            </div>
+                            <div class="stat-value">{{ stats.resolved_today }}</div>
+                            <div class="stat-label">Resueltos hoy</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-4">
+                        <div class="stat-card text-center p-4 rounded bg-light">
+                            <div class="stat-icon mb-2">
+                                <i class="fas fa-percentage text-warning fa-2x"></i>
+                            </div>
+                            <div class="stat-value">
+                                {% if stats.tickets_today > 0 %}
+                                {{ ((stats.resolved_today / stats.tickets_today) * 100)|round|int }}%
+                                {% else %}
+                                0%
+                                {% endif %}
+                            </div>
+                            <div class="stat-label">Tasa de resolución</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Gráficos -->
+<div class="row">
+    <!-- Gráfico de Tickets por Día -->
+    <div class="col-xl-6 col-lg-12 mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Tickets por Día</h6>
+            </div>
+            <div class="card-body">
+                <div class="chart-container" style="position: relative; height:250px;">
+                    <canvas id="ticketsChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Gráfico de Razones de Escalación -->
+    <div class="col-xl-6 col-lg-12 mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Razones de Escalación</h6>
+            </div>
+            <div class="card-body">
+                <div class="chart-container" style="position: relative; height:250px;">
+                    <canvas id="reasonsChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Inicializar gráficos
+        initCharts();
+        
+        // Función para inicializar gráficos
+        function initCharts() {
+            // Datos para gráfico de tickets por día
+            var ticketsCtx = document.getElementById('ticketsChart').getContext('2d');
+            var ticketsChart = new Chart(ticketsCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'],
+                    datasets: [{
+                        label: 'Tickets',
+                        data: [5, 8, 12, 10, 7, 3, 2],
+                        backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Datos para gráfico de razones
+            var reasonsCtx = document.getElementById('reasonsChart').getContext('2d');
+            var reasonsChart = new Chart(reasonsCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Solicitud de Usuario', 'Múltiples Fallos', 'Consulta Compleja', 'Decisión de Agente'],
+                    datasets: [{
+                        data: [30, 40, 20, 10],
+                        backgroundColor: [
+                            'rgba(255, 99, 132, 0.7)',
+                            'rgba(54, 162, 235, 0.7)',
+                            'rgba(255, 206, 86, 0.7)',
+                            'rgba(75, 192, 192, 0.7)'
+                        ],
+                        borderColor: [
+                            'rgba(255, 99, 132, 1)',
+                            'rgba(54, 162, 235, 1)',
+                            'rgba(255, 206, 86, 1)',
+                            'rgba(75, 192, 192, 1)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right'
+                        }
+                    }
+                }
+            });
+            
+            // Actualizar con datos reales
+            fetchChartData();
+        }
+        
+        // Función para obtener datos reales para los gráficos
+        function fetchChartData() {
+            fetch('/support/api/stats')
+                .then(response => response.json())
+                .then(data => {
+                    // Actualizar gráficos con datos reales si están disponibles
+                    // Esta función se implementará cuando se disponga de los datos reales
+                })
+                .catch(error => console.error('Error al obtener datos de gráficos:', error));
+        }
+        
+        // Actualizar tickets pendientes y asignados cada minuto
+        setInterval(function() {
+            fetch('/support/api/tickets/pending')
+                .then(response => response.json())
+                .then(data => {
+                    // Actualizar contadores y listas
+                    // Esta función se implementará cuando se disponga de la API
+                })
+                .catch(error => console.error('Error al actualizar tickets pendientes:', error));
+                
+            fetch('/support/api/tickets/assigned')
+                .then(response => response.json())
+                .then(data => {
+                    // Actualizar contadores y listas
+                    // Esta función se implementará cuando se disponga de la API
+                })
+                .catch(error => console.error('Error al actualizar tickets asignados:', error));
+        }, 60000); // Actualizar cada minuto
+    });
+</script>
+{% endblock %}
