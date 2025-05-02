@@ -102,6 +102,24 @@
         });
     }
 
+    // Función para cargar Socket.IO
+    function loadSocketIOLibrary() {
+        return new Promise((resolve, reject) => {
+            if (window.io) {
+                resolve(window.io);
+                return;
+            }
+
+            const script = document.createElement('script');
+            script.src = 'https://cdn.socket.io/4.7.4/socket.io.min.js';
+            script.integrity = 'sha384-Gr6Lu2Ajx28mzwyVR8CFkULdCU7kMlZ9UthllibdOSo6qAiN+yXNHqtgdTvFXMT4';
+            script.crossOrigin = 'anonymous';
+            script.onload = () => resolve(window.io);
+            script.onerror = () => reject(new Error('No se pudo cargar Socket.IO'));
+            document.head.appendChild(script);
+        });
+    }
+
     // Añadir estilos CSS para elementos Markdown
     function addMarkdownStyles() {
         const styles = document.createElement('style');
@@ -685,6 +703,7 @@
         // Ajustar
         r = Math.max(0, Math.min(255, r + amount));
         g = Math.max(0, Math.min(255, g + amount));
+
         b = Math.max(0, Math.min(255, b + amount));
 
         // Convertir de vuelta a hex
@@ -701,6 +720,8 @@
     }
 
     let sessionId;
+    let activeTicketId = null; // Variable para almacenar el ID de ticket activo
+    let lastMessageTimestamp = 0; // Variable para almacenar el timestamp del último mensaje
     // Intentar recuperar un ID existente
     const savedSessionId = localStorage.getItem('siacasa_session_id');
     let activityTimeout = null;
@@ -972,6 +993,12 @@
         // Disparar evento de widget cargado
         const widgetLoadedEvent = new CustomEvent('siacasa-widget-loaded');
         window.dispatchEvent(widgetLoadedEvent);
+
+        // Inicializar conexión de socket
+        initSocketConnection();
+
+        // Iniciar polling para nuevos mensajes
+        setInterval(pollForNewMessages, 5000);
     }
 
     // Cargar librerías primero y luego inicializar para asegurar que todo funcione
@@ -1026,5 +1053,83 @@
         }
     });
 
+    // Inicializar conexión de socket
+    async function initSocketConnection() {
+        try {
+            // Asegurar que Socket.IO esté cargado
+            const socket = io('http://localhost:3200', {
+                query: {
+                    user_id: sessionId,
+                    ticket_id: activeTicketId
+                },
+                transports: ['websocket', 'polling']
+            });
+
+            socket.on('connect', function() {
+                console.log('Socket.IO conectado con ID:', socket.id);
+                
+                // Suscribirse explícitamente al ticket activo si existe
+                if (activeTicketId) {
+                    console.log('Suscribiéndose al ticket:', activeTicketId);
+                    socket.emit('subscribe_ticket', {
+                        ticket_id: activeTicketId,
+                        role: 'user'
+                    });
+                }
+            });
+
+            // Añadir log para debuguear los mensajes entrantes
+            socket.on('chat_message', function(data) {
+                console.log('Mensaje recibido:', data);
+                if (data.sender_type === 'agent') {
+                    addMessage(data.content, false);
+                }
+            });
+
+            // Añadir manejador para todos los eventos para debug
+            socket.onAny((event, ...args) => {
+                console.log(`Evento Socket.IO recibido: ${event}`, args);
+            });
+        } catch (error) {
+            console.error('Error al inicializar Socket.IO:', error);
+        }
+    }
+
+    // Polling para nuevos mensajes
+    function pollForNewMessages() {
+        if (!sessionId || !activeTicketId) return;
+        
+        console.log(`Realizando polling de mensajes. Último mensaje: ${lastMessageTimestamp}`);
+        
+        // Usar la misma base URL que la API
+        fetch(`/api/mensajes?usuario_id=${sessionId}&ticket_id=${activeTicketId}&ultimo_mensaje=${lastMessageTimestamp}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Error de servidor: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.status === 'success' && data.mensajes && Array.isArray(data.mensajes)) {
+                    console.log(`Polling: ${data.mensajes.length} mensajes nuevos encontrados`);
+                    
+                    data.mensajes.forEach(msg => {
+                        // Solo procesar mensajes que no hemos mostrado antes
+                        const msgTimestamp = new Date(msg.timestamp).getTime();
+                        if (msgTimestamp > lastMessageTimestamp) {
+                            if (msg.sender_type === 'agent') {
+                                addMessage(msg.content, false);
+                            }
+                            
+                            // Actualizar timestamp del último mensaje
+                            lastMessageTimestamp = msgTimestamp;
+                        }
+                    });
+                }
+            })
+            .catch(error => {
+                console.warn('Error en polling de mensajes:', error);
+            });
+    }
 
 })();

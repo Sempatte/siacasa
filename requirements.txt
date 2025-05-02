@@ -43,3 +43,5 @@ flask_cors>=3.0.0
 
 websockets>=10.4.0
 Flask-SocketIO>=5.3.0
+
+eventlet>=0.39.1

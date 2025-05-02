@@ -74,6 +74,7 @@ class ProcesarMensajeUseCase:
             # CAMBIO 2: Obtener la conversación ANTES de agregar mensajes
             # para verificar si existe y tiene historial
             conversacion = self.chatbot_service.obtener_o_crear_conversacion(usuario_id)
+            
             mensaje_count_before = len(conversacion.mensajes) if conversacion else 0
             logger.info(f"Conversación encontrada con {mensaje_count_before} mensajes")
             

@@ -372,7 +372,7 @@ class SupportService:
             # NOTA: La conversación ya se guarda al guardar el ticket
             
         except Exception as e:
-            logger.error(f"Error al notificar al usuario sobre asignación: {e}", exc_info=True)
+            logger.error(f"Error al notificar al usuario sobre asignación: {e}")
     
     def resolve_ticket(self, ticket_id: str, notes: Optional[str] = None) -> bool:
         """
@@ -433,7 +433,7 @@ class SupportService:
             # NOTA: La conversación ya se guarda al guardar el ticket
             
         except Exception as e:
-            logger.error(f"Error al notificar al usuario sobre resolución: {e}", exc_info=True)
+            logger.error(f"Error al notificar al usuario sobre resolución: {e}")
     
     def close_ticket(self, ticket_id: str) -> bool:
         """
@@ -526,7 +526,7 @@ class SupportService:
             # NOTA: La conversación ya se guarda al guardar el ticket
             
         except Exception as e:
-            logger.error(f"Error al notificar al usuario sobre desasignación: {e}", exc_info=True)
+            logger.error(f"Error al notificar al usuario sobre desasignación: {e}")
     
     def set_ticket_status(self, ticket_id: str, status: TicketStatus) -> bool:
         """
@@ -590,27 +590,38 @@ class SupportService:
             # Enviar mensaje a través del WebSocket
             websocket_server = get_websocket_server()
             if websocket_server:
+                # Añadir log para depuración
+                logger.info(f"Enviando mensaje por WebSocket. Servidor: {websocket_server}")
+                
                 # Crear un bucle de eventos para ejecutar código asyncio
                 import asyncio
                 
                 async def send_ws_message():
-                    await websocket_server.broadcast_message(
-                        ticket_id,
-                        content,
-                        agent_id,
-                        agent_name,
-                        'agent',
-                        is_internal
-                    )
+                    try:
+                        await websocket_server.broadcast_message(
+                            ticket_id,
+                            content,
+                            agent_id,
+                            agent_name,
+                            'agent',
+                            is_internal
+                        )
+                        logger.info(f"Mensaje enviado por WebSocket correctamente a ticket {ticket_id}")
+                    except Exception as e:
+                        logger.error(f"Error al enviar mensaje por WebSocket: {e}", exc_info=True)
                 
-                # Ejecutar función async
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+                # Ejecutar función async con mejor manejo de errores
                 try:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
                     loop.run_until_complete(send_ws_message())
+                except Exception as e:
+                    logger.error(f"Error en el loop de asyncio: {e}", exc_info=True)
                 finally:
                     loop.close()
-            
+            else:
+                logger.warning("No se encontró servidor WebSocket para enviar mensaje")
+        
             logger.info(f"Mensaje enviado en ticket {ticket_id}" + (" (interno)" if is_internal else ""))
             return True
             

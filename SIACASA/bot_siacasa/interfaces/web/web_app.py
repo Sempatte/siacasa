@@ -1,5 +1,5 @@
 # bot_siacasa/interfaces/web/web_app.py
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import uuid
 import logging
@@ -9,7 +9,7 @@ from flask_cors import CORS  # Necesitarás instalar flask-cors
 
 from bot_siacasa.domain.banks_config import BANK_CONFIGS
 from bot_siacasa.application.use_cases.procesar_mensaje_use_case import ProcesarMensajeUseCase
-from bot_siacasa.infrastructure.websocket.socketio_server import get_socketio_server
+from bot_siacasa.infrastructure.websocket.socketio_server import get_websocket_server as get_socketio_server
 
 logger = logging.getLogger(__name__)
 
@@ -240,6 +240,45 @@ class WebApp:
             response.headers['Content-Type'] = 'application/javascript'
             return response
         
+        @self.app.route('/api/mensajes', methods=['GET'])
+        def obtener_mensajes():
+            """Endpoint para recuperar mensajes nuevos para un usuario específico."""
+            try:
+                usuario_id = request.args.get('usuario_id')
+                ticket_id = request.args.get('ticket_id')
+                ultimo_mensaje = int(request.args.get('ultimo_mensaje') or 0)
+                
+                if not usuario_id:
+                    return jsonify({
+                        'status': 'error',
+                        'error': 'Se requiere usuario_id',
+                        'mensajes': []
+                    }), 400
+                
+                # Obtener mensajes nuevos
+                from datetime import datetime
+                timestamp_ultimo = datetime.fromtimestamp(ultimo_mensaje / 1000) if ultimo_mensaje > 0 else None
+                
+                # Si tenemos un ticket_id, obtener mensajes de ese ticket
+                if ticket_id:
+                    from bot_siacasa.domain.services.escalation_service import get_escalation_service
+                    escalation_service = get_escalation_service()
+                    messages = escalation_service.get_ticket_messages(ticket_id, timestamp_ultimo)
+                else:
+                    # Si no, obtener los mensajes de la conversación del usuario
+                    messages = []
+                    
+                return jsonify({
+                    'status': 'success',
+                    'mensajes': messages
+                })
+            except Exception as e:
+                logger.error(f"Error al obtener mensajes: {e}", exc_info=True)
+                return jsonify({
+                    'status': 'error',
+                    'error': str(e),
+                    'mensajes': []
+                }), 500
         
         
     # NUEVO: Añadir métodos de gestión de sesiones

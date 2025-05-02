@@ -29,6 +29,13 @@ logger = logging.getLogger(__name__)
 # Cargar variables de entorno
 load_dotenv()
 
+# Definir el filtro nl2br para convertir saltos de línea en etiquetas <br>
+def nl2br(value):
+    if value:
+        return value.replace('\n', '<br>\n')
+    return ""
+
+
 class AdminPanel:
     """
     Aplicación web Flask para el panel de administración del chatbot.
@@ -82,6 +89,8 @@ class AdminPanel:
         self.app.register_blueprint(training_blueprint, url_prefix='/training')
         self.app.register_blueprint(auth_blueprint)
         self.app.register_blueprint(support_blueprint, url_prefix='/support')
+        
+        self.app.jinja_env.filters['nl2br'] = nl2br  # Registrar filtro nl2br
         
         # Registrar rutas
         self._register_routes()

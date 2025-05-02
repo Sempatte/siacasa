@@ -112,7 +112,7 @@
                                             bg-primary-light text-dark
                                             {% endif %}
                                         ">
-                                            {{ message.content|nl2br }}
+                                            {{ message.content|safe }}
                                         </div>
                                     </div>
                                 </div>
@@ -141,7 +141,7 @@
                                         </div>
                                         
                                         <div class="message-body p-3 rounded bg-warning-light text-dark">
-                                            {{ message.content|nl2br }}
+                                            {{ message.content|safe }}
                                         </div>
                                     </div>
                                 </div>
@@ -444,24 +444,38 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
 <script>
+    /**
+    * Fix for the chat functionality in live_chat.html
+    * 
+    * This script should be added to or replace the existing script in the extra_scripts block
+    * of the template.
+    */
     document.addEventListener('DOMContentLoaded', function() {
-        // Variables para WebSocket
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-        const wsHost = '{{ websocket_info.host }}';
-        const wsPort = {{ websocket_info.port }};
-        const wsUrl = `${wsProtocol}${wsHost}:${wsPort}`;
+        // Variables para Socket.IO
+        const socketHost = '{{ websocket_info.host }}';
+        const socketPort = {{ websocket_info.port }};
         const ticketId = '{{ ticket.id }}';
         const agentId = '{{ websocket_info.agent_id }}';
         const agentName = '{{ websocket_info.agent_name }}';
         
         let socket = null;
-        let reconnectInterval = null;
         let typingTimeout = null;
         let isTyping = false;
+        let connectionStatus = document.createElement('div');
         
-        // Conectar WebSocket
-        connectWebSocket();
+        // Crear indicador de estado de conexión
+        connectionStatus.className = 'connection-status alert alert-warning';
+        connectionStatus.style.position = 'fixed';
+        connectionStatus.style.bottom = '10px';
+        connectionStatus.style.right = '10px';
+        connectionStatus.style.zIndex = '1000';
+        connectionStatus.textContent = 'Conectando al servidor...';
+        document.body.appendChild(connectionStatus);
+        
+        // Conectar a Socket.IO
+        connectSocketIO();
         
         // Scroll al final de la conversación
         scrollToBottom();
@@ -472,6 +486,7 @@
         // Manejar formulario de mensajes
         const messageForm = document.getElementById('messageForm');
         const messageInput = document.getElementById('messageInput');
+        const submitButton = messageForm.querySelector('button[type="submit"]');
         
         messageForm.addEventListener('submit', function(e) {
             e.preventDefault();
@@ -481,27 +496,49 @@
             
             const isInternal = document.getElementById('internalMessage').checked;
             
-            // Enviar mensaje a través del WebSocket
-            if (socket && socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({
-                    type: 'chat_message',
+            // Mostrar indicador de envío
+            const originalText = submitButton.innerHTML;
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Enviando...';
+            
+            // Enviar mensaje a través de Socket.IO
+            if (socket && socket.connected) {
+                console.log("Enviando mensaje a través de Socket.IO");
+                
+                // Emitir evento de mensaje
+                socket.emit('chat_message', {
                     ticket_id: ticketId,
                     content: message,
                     sender_id: agentId,
                     sender_name: agentName,
                     sender_type: 'agent',
                     is_internal: isInternal
-                }));
+                });
                 
-                // Añadir mensaje a la interfaz
+                // Añadir mensaje a la interfaz inmediatamente para mejor UX
                 addMessage(message, 'agent', agentName, isInternal);
                 
                 // Limpiar formulario
                 messageInput.value = '';
                 document.getElementById('internalMessage').checked = false;
+                
+                // Restaurar botón
+                submitButton.disabled = false;
+                submitButton.innerHTML = originalText;
             } else {
-                // Si el WebSocket no está disponible, enviar por POST
-                messageForm.submit();
+                console.log("Socket.IO no disponible, intentando enviar por POST");
+                // Si la conexión con Socket.IO no está disponible, usar la forma tradicional
+                this.submit();
+                
+                // Mostrar mensaje de error
+                connectionStatus.textContent = 'Error de conexión: Usando método alternativo';
+                connectionStatus.className = 'connection-status alert alert-warning';
+                connectionStatus.style.display = 'block';
+                
+                // Auto-ocultar después de 3 segundos
+                setTimeout(() => {
+                    connectionStatus.style.display = 'none';
+                }, 3000);
             }
         });
         
@@ -509,14 +546,13 @@
         messageInput.addEventListener('input', function() {
             if (!isTyping) {
                 isTyping = true;
-                if (socket && socket.readyState === WebSocket.OPEN) {
-                    socket.send(JSON.stringify({
-                        type: 'typing',
+                if (socket && socket.connected) {
+                    socket.emit('typing', {
                         ticket_id: ticketId,
                         sender_id: agentId,
                         sender_type: 'agent',
                         is_typing: true
-                    }));
+                    });
                 }
             }
             
@@ -528,14 +564,13 @@
             // Establecer nuevo timeout
             typingTimeout = setTimeout(function() {
                 isTyping = false;
-                if (socket && socket.readyState === WebSocket.OPEN) {
-                    socket.send(JSON.stringify({
-                        type: 'typing',
+                if (socket && socket.connected) {
+                    socket.emit('typing', {
                         ticket_id: ticketId,
                         sender_id: agentId,
                         sender_type: 'agent',
                         is_typing: false
-                    }));
+                    });
                 }
             }, 3000);
         });
@@ -551,65 +586,76 @@
             });
         });
         
-        // Función para conectar WebSocket
-        function connectWebSocket() {
+        // Función para conectar a Socket.IO
+        function connectSocketIO() {
             try {
-                socket = new WebSocket(wsUrl);
+                // Construir la URL correcta para Socket.IO
+                // Socket.IO funciona mejor con la URL base del servidor sin path
+                const socketUrl = `${window.location.protocol}//${socketHost}:${socketPort}`;
+                console.log(`Conectando a Socket.IO: ${socketUrl}`);
                 
-                socket.onopen = function() {
-                    console.log('WebSocket conectado');
+                connectionStatus.textContent = 'Conectando al servidor...';
+                connectionStatus.className = 'connection-status alert alert-warning';
+                connectionStatus.style.display = 'block';
+                
+                // Inicializar Socket.IO con las opciones correctas
+                socket = io(socketUrl, {
+                    // El primer intento será con WebSocket, luego caerá a polling si es necesario
+                    transports: ['websocket', 'polling'],
+                    reconnection: true,
+                    reconnectionAttempts: 5,
+                    reconnectionDelay: 1000,
+                    timeout: 20000,
+                    // Habilitar debug para ver mensajes detallados en consola
+                    debug: true
+                });
+                
+                // Eventos de Socket.IO
+                socket.on('connect', function() {
+                    console.log('Socket.IO conectado con ID:', socket.id);
+                    connectionStatus.textContent = 'Conectado al servidor';
+                    connectionStatus.className = 'connection-status alert alert-success';
                     
-                    // Limpiar intervalo de reconexión
-                    if (reconnectInterval) {
-                        clearInterval(reconnectInterval);
-                        reconnectInterval = null;
-                    }
+                    // Auto-ocultar después de 3 segundos
+                    setTimeout(() => {
+                        connectionStatus.style.display = 'none';
+                    }, 3000);
                     
                     // Suscribirse al ticket
-                    socket.send(JSON.stringify({
-                        type: 'subscribe_ticket',
+                    socket.emit('subscribe_ticket', {
                         ticket_id: ticketId,
                         role: 'agent'
-                    }));
-                };
-                
-                socket.onmessage = function(event) {
-                    const data = JSON.parse(event.data);
-                    handleWebSocketMessage(data);
-                };
-                
-                socket.onclose = function() {
-                    console.log('WebSocket desconectado');
+                    });
                     
-                    // Intentar reconectar
-                    if (!reconnectInterval) {
-                        reconnectInterval = setInterval(function() {
-                            console.log('Intentando reconectar WebSocket...');
-                            connectWebSocket();
-                        }, 5000);
-                    }
-                };
+                    console.log('Suscripción enviada para ticket:', ticketId);
+                });
                 
-                socket.onerror = function(error) {
-                    console.error('Error en WebSocket:', error);
-                };
-            } catch (error) {
-                console.error('Error al conectar WebSocket:', error);
-            }
-        }
-        
-        // Manejar mensajes del WebSocket
-        function handleWebSocketMessage(data) {
-            switch (data.type) {
-                case 'welcome':
-                    console.log('Bienvenido al WebSocket', data);
-                    break;
+                socket.on('disconnect', function(reason) {
+                    console.log('Socket.IO desconectado, razón:', reason);
+                    connectionStatus.textContent = 'Desconectado. Reconectando...';
+                    connectionStatus.className = 'connection-status alert alert-danger';
+                    connectionStatus.style.display = 'block';
+                });
                 
-                case 'subscription_confirmed':
-                    console.log('Suscripción confirmada', data);
-                    break;
+                socket.on('connect_error', function(error) {
+                    console.error('Error de conexión Socket.IO:', error);
+                    connectionStatus.textContent = 'Error de conexión: ' + error.message;
+                    connectionStatus.className = 'connection-status alert alert-danger';
+                    connectionStatus.style.display = 'block';
+                });
                 
-                case 'chat_message':
+                // Manejar mensajes y eventos
+                socket.on('welcome', function(data) {
+                    console.log('Bienvenido a Socket.IO:', data);
+                });
+                
+                socket.on('subscription_confirmed', function(data) {
+                    console.log('Suscripción confirmada:', data);
+                });
+                
+                socket.on('chat_message', function(data) {
+                    console.log('Mensaje recibido:', data);
+                    
                     // Si el mensaje es del usuario, añadirlo a la interfaz
                     if (data.sender_type === 'user') {
                         addMessage(data.content, 'user', 'Usuario', false);
@@ -618,30 +664,49 @@
                     else if (data.sender_type === 'agent' && data.sender_id !== agentId) {
                         addMessage(data.content, 'agent', data.sender_name, data.is_internal);
                     }
-                    break;
+                });
                 
-                case 'typing':
+                socket.on('message_sent', function(data) {
+                    console.log('Mensaje enviado correctamente:', data);
+                });
+                
+                socket.on('typing', function(data) {
                     // Mostrar u ocultar indicador de escritura
                     if (data.sender_type === 'user') {
                         const typingIndicator = document.getElementById('typingIndicator');
-                        if (data.is_typing) {
-                            typingIndicator.classList.remove('d-none');
-                            scrollToBottom();
-                        } else {
-                            typingIndicator.classList.add('d-none');
+                        if (typingIndicator) {
+                            if (data.is_typing) {
+                                typingIndicator.classList.remove('d-none');
+                                scrollToBottom();
+                            } else {
+                                typingIndicator.classList.add('d-none');
+                            }
                         }
                     }
-                    break;
+                });
                 
-                case 'error':
-                    console.error('Error en WebSocket:', data.message);
-                    break;
+                socket.on('error', function(data) {
+                    console.error('Error en Socket.IO:', data);
+                    alert('Error: ' + (data.message || 'Error de comunicación'));
+                });
+                
+            } catch (error) {
+                console.error('Error al inicializar Socket.IO:', error);
+                connectionStatus.textContent = 'Error al conectar: ' + error.message;
+                connectionStatus.className = 'connection-status alert alert-danger';
+                connectionStatus.style.display = 'block';
+                
+                // Fallar silenciosamente - la app seguirá funcionando con POST
             }
         }
         
         // Añadir mensaje a la interfaz
         function addMessage(content, senderType, senderName, isInternal) {
             const chatHistory = document.getElementById('chatHistory');
+            if (!chatHistory) {
+                console.error('No se encontró el elemento chatHistory');
+                return;
+            }
             
             const now = new Date();
             const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -711,13 +776,20 @@
         // Scroll al final de la conversación
         function scrollToBottom() {
             const chatHistory = document.getElementById('chatHistory');
-            chatHistory.scrollTop = chatHistory.scrollHeight;
+            if (chatHistory) {
+                chatHistory.scrollTop = chatHistory.scrollHeight;
+            }
         }
         
         // Actualizar tiempo activo
         function updateActiveTime() {
             const creationDate = new Date('{{ ticket.fecha_creacion.isoformat() }}');
             const activeTimeElement = document.getElementById('activeTime');
+            
+            if (!activeTimeElement) {
+                console.error('No se encontró el elemento activeTime');
+                return;
+            }
             
             function updateTime() {
                 const now = new Date();

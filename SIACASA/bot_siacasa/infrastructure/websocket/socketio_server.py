@@ -1,10 +1,11 @@
-# bot_siacasa/infrastructure/websocket/socketio_server.py
+# Fixed implementation for socketio_server.py
 import logging
 import json
+import uuid
 from datetime import datetime
 from typing import Dict, List, Set
 
-from flask import Flask
+from flask import Flask, request
 from flask_socketio import SocketIO, emit, join_room, leave_room
 
 logger = logging.getLogger(__name__)
@@ -22,14 +23,29 @@ class ChatSocketIOServer:
             app: Aplicación Flask (opcional)
             support_repository: Repositorio para persistencia de mensajes
         """
-        self.socketio = SocketIO(app, cors_allowed_origins="*") if app else SocketIO(cors_allowed_origins="*")
+        # No crear un objeto SocketIO aquí, solo referenciar el que se pasa
+        self.socketio = None
         self.support_repository = support_repository
         self.user_connections = {}  # user_id -> session_id
         self.agent_connections = {}  # agent_id -> session_id
         
-        # Registrar handlers
-        self._register_handlers()
+        # Log when server is initialized
+        logger.info("SocketIO server initialized")
+        if support_repository:
+            logger.info("Support repository provided")
+        else:
+            logger.warning("No support repository provided, messages won't be persisted")
     
+    def init_app(self, socketio):
+        """
+        Inicializa con la instancia SocketIO creada externamente.
+        
+        Args:
+            socketio: Instancia de SocketIO
+        """
+        self.socketio = socketio
+        self._register_handlers()
+        
     def _register_handlers(self):
         """
         Registra los manejadores de eventos SocketIO.
@@ -51,10 +67,12 @@ class ChatSocketIOServer:
         
         @self.socketio.on('subscribe_ticket')
         def handle_subscribe_ticket(data):
+            logger.info(f"Solicitud de suscripción a ticket: {data}")
             ticket_id = data.get('ticket_id')
             role = data.get('role', 'agent')  # 'agent' o 'user'
             
             if not ticket_id:
+                logger.warning("Solicitud de suscripción sin ticket_id")
                 emit('error', {
                     'message': 'Se requiere ticket_id',
                     'timestamp': datetime.now().isoformat()
@@ -122,58 +140,94 @@ class ChatSocketIOServer:
         
         @self.socketio.on('chat_message')
         def handle_chat_message(data):
-            ticket_id = data.get('ticket_id')
-            content = data.get('content')
-            sender_id = data.get('sender_id')
-            sender_name = data.get('sender_name')
-            sender_type = data.get('sender_type', 'agent')  # 'agent' o 'user'
-            is_internal = data.get('is_internal', False)
-            
-            if not all([ticket_id, content, sender_id]):
+            try:
+                # Log completo de los datos recibidos
+                logger.info(f"Mensaje recibido: {data}")
+                
+                ticket_id = data.get('ticket_id')
+                content = data.get('content')
+                sender_id = data.get('sender_id')
+                sender_name = data.get('sender_name', 'Agente')
+                sender_type = data.get('sender_type', 'agent')
+                is_internal = data.get('is_internal', False)
+                
+                if not all([ticket_id, content, sender_id]):
+                    logger.warning(f"Datos incompletos en mensaje: {data}")
+                    emit('error', {
+                        'message': 'Se requieren ticket_id, content y sender_id',
+                        'timestamp': datetime.now().isoformat()
+                    })
+                    return
+                
+                # Generar ID de mensaje
+                message_id = str(uuid.uuid4())
+                timestamp = datetime.now().isoformat()
+                
+                # Crear mensaje
+                message = {
+                    'type': 'chat_message',
+                    'message_id': message_id,
+                    'ticket_id': ticket_id,
+                    'content': content,
+                    'sender_id': sender_id,
+                    'sender_name': sender_name,
+                    'sender_type': sender_type,
+                    'is_internal': is_internal,
+                    'timestamp': timestamp
+                }
+                
+                # Guardar mensaje en la base de datos
+                if sender_type == "agent" and self.support_repository:
+                    try:
+                        import traceback
+                        logger.info(f"Intentando guardar mensaje de agente: {ticket_id}, {sender_id}, {sender_name}")
+                        
+                        if not hasattr(self.support_repository, 'agregar_mensaje_agente'):
+                            logger.error("El repositorio no tiene el método 'agregar_mensaje_agente'")
+                            emit('error', {
+                                'message': 'Error en la configuración del servidor: método no encontrado',
+                                'timestamp': datetime.now().isoformat()
+                            })
+                            return
+                        
+                        result = self.support_repository.agregar_mensaje_agente(
+                            ticket_id, 
+                            sender_id, 
+                            sender_name, 
+                            content, 
+                            is_internal
+                        )
+                        logger.info(f"Mensaje guardado correctamente: {result}")
+                    except Exception as e:
+                        logger.error(f"Error al guardar mensaje de agente: {e}")
+                        logger.error(traceback.format_exc())
+                        emit('error', {
+                            'message': f'Error al guardar mensaje: {str(e)}',
+                            'timestamp': datetime.now().isoformat()
+                        })
+                        return
+                
+                # Emitir mensaje a todos los suscriptores
+                room = f'ticket_{ticket_id}'
+                logger.info(f"Emitiendo mensaje a la sala {room}")
+                
+                emit('chat_message', message, room=room, include_self=False)
+                
+                # Enviar confirmación al remitente
+                emit('message_sent', {
+                    'message_id': message_id,
+                    'timestamp': timestamp,
+                    'status': 'success'
+                })
+                
+            except Exception as e:
+                import traceback
+                logger.error(f"Error en handle_chat_message: {e}")
+                logger.error(traceback.format_exc())
                 emit('error', {
-                    'message': 'Se requieren ticket_id, content y sender_id',
+                    'message': f'Error en el servidor: {str(e)}',
                     'timestamp': datetime.now().isoformat()
                 })
-                return
-            
-            # Generar ID de mensaje
-            message_id = str(uuid.uuid4())
-            timestamp = datetime.now().isoformat()
-            
-            # Crear mensaje
-            message = {
-                'type': 'chat_message',
-                'message_id': message_id,
-                'ticket_id': ticket_id,
-                'content': content,
-                'sender_id': sender_id,
-                'sender_name': sender_name,
-                'sender_type': sender_type,
-                'is_internal': is_internal,
-                'timestamp': timestamp
-            }
-            
-            # Guardar mensaje en la base de datos si es de un agente
-            if sender_type == "agent" and self.support_repository:
-                try:
-                    self.support_repository.agregar_mensaje_agente(
-                        ticket_id, 
-                        sender_id, 
-                        sender_name, 
-                        content, 
-                        is_internal
-                    )
-                except Exception as e:
-                    logger.error(f"Error al guardar mensaje de agente: {e}", exc_info=True)
-            
-            # Emitir a todos los suscriptores del ticket
-            # Si es un mensaje interno, solo enviarlo a agentes
-            if is_internal:
-                # Enviarlo solo a los agentes
-                emit('chat_message', message, room=f'ticket_{ticket_id}', include_self=False, skip_sid=[sid for user_id, sid in self.user_connections.items()])
-            else:
-                # Enviarlo a todos
-                emit('chat_message', message, room=f'ticket_{ticket_id}', include_self=False)
         
         @self.socketio.on('typing')
         def handle_typing(data):
@@ -202,28 +256,21 @@ class ChatSocketIOServer:
             # Emitir a todos los suscriptores del ticket
             emit('typing', message, room=f'ticket_{ticket_id}', include_self=False)
     
-    def init_app(self, app):
-        """
-        Inicializa la instancia SocketIO con una aplicación Flask.
-        
-        Args:
-            app: Aplicación Flask
-        """
-        self.socketio.init_app(app)
-    
-    def run(self, app, host='0.0.0.0', port=8765, **kwargs):
+    def run(self, app, host='0.0.0.0', port=3200, **kwargs):
         """
         Ejecuta el servidor SocketIO.
         
         Args:
             app: Aplicación Flask
-            host: Host a utilizar
-            port: Puerto a utilizar
-            **kwargs: Argumentos adicionales para SocketIO
+            host: Host
+            port: Puerto
+            kwargs: Argumentos adicionales para socketio.run()
         """
-        logger.info(f"Iniciando servidor SocketIO en {host}:{port}")
-        self.socketio.init_app(app)
-        self.socketio.run(app, host=host, port=port, **kwargs)
+        if self.socketio:
+            logger.info(f"Iniciando servidor Socket.IO en {host}:{port}")
+            self.socketio.run(app, host=host, port=port, **kwargs)
+        else:
+            logger.error("No se puede iniciar servidor Socket.IO: no hay instancia SocketIO")
     
     def _cleanup_connection(self, session_id):
         """
@@ -250,25 +297,39 @@ socketio_server = None
 
 def init_socketio_server(app=None, support_repository=None):
     """
-    Inicializa y devuelve la instancia global del servidor SocketIO.
+    Inicializa y devuelve la instancia global del servidor Socket.IO.
     
     Args:
         app: Aplicación Flask (opcional)
         support_repository: Repositorio para persistencia de mensajes
         
     Returns:
-        Instancia del servidor SocketIO
+        Instancia del servidor Socket.IO
     """
     global socketio_server
     
     if socketio_server is None:
-        socketio_server = ChatSocketIOServer(app, support_repository)
-    elif app is not None:
-        socketio_server.init_app(app)
+        # Primero crear la instancia de SocketIO
+        socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
+        
+        # Luego crear el servidor con la clase wrapper
+        socketio_server = ChatSocketIOServer(support_repository=support_repository)
+        
+        # Inicializar el servidor con la instancia de SocketIO
+        socketio_server.init_app(socketio)
     
     return socketio_server
 
 def get_socketio_server():
+    """
+    Alias for get_websocket_server() for backward compatibility.
+    
+    Returns:
+        Instancia del servidor SocketIO o None si no se ha inicializado
+    """
+    return get_websocket_server()
+
+def get_websocket_server():
     """
     Obtiene la instancia global del servidor SocketIO.
     

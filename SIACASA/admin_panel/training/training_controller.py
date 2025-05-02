@@ -61,7 +61,25 @@ def upload_file():
     Procesa la subida de un archivo de entrenamiento.
     """
     try:
-        # [Código existente de subida del archivo]
+        # Verificar si se envió un archivo
+        if 'file' not in request.files:
+            flash('No se seleccionó ningún archivo.', 'danger')
+            return redirect(url_for('training.index'))
+        
+        file = request.files['file']
+        
+        # Verificar si se seleccionó un archivo
+        if file.filename == '':
+            flash('No se seleccionó ningún archivo.', 'danger')
+            return redirect(url_for('training.index'))
+        
+        # Verificar si el archivo tiene una extensión permitida
+        if not allowed_file(file.filename):
+            flash(f'Tipo de archivo no permitido. Por favor, sube un archivo con alguna de estas extensiones: {", ".join(ALLOWED_EXTENSIONS)}', 'danger')
+            return redirect(url_for('training.index'))
+            
+        # Obtener la descripción del archivo
+        description = request.form.get('description', '')
         
         # Guardar archivo
         user_id = session.get('user_id')

@@ -79,7 +79,7 @@ def ticket_details(ticket_id):
     # Obtener información del WebSocket
     websocket_info = {
         'host': request.host.split(':')[0],  # Obtener solo el hostname sin puerto
-        'port': 8765,  # Puerto del WebSocket (debe coincidir con el del servidor)
+        'port': 3200,  # Puerto del WebSocket (debe coincidir con el del servidor)
         'agent_id': agent_id,
         'agent_name': user_name,
         'ticket_id': ticket_id
@@ -141,7 +141,7 @@ def live_chat(ticket_id):
     # Obtener información del WebSocket
     websocket_info = {
         'host': request.host.split(':')[0],  # Obtener solo el hostname sin puerto
-        'port': 8765,  # Puerto del WebSocket (debe coincidir con el del servidor)
+        'port': 3200,  # Puerto del WebSocket (debe coincidir con el del servidor)
         'agent_id': agent_id,
         'agent_name': user_name,
         'ticket_id': ticket_id

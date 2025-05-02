@@ -4,6 +4,10 @@ import os
 import logging
 from dotenv import load_dotenv
 
+# Aplicar monkey_patch de eventlet ANTES de cualquier otra importación
+import eventlet
+eventlet.monkey_patch()
+
 # Configurar logging
 logging.basicConfig(
     level=logging.INFO,
@@ -65,10 +69,6 @@ def main():
         support_repository = SupportRepository(db_connector)
         logger.info("Repositorio de soporte inicializado")
         
-         # Iniciar servidor WebSocket para chat en tiempo real
-        socketio_server = init_socketio_server(support_repository=support_repository)
-        logger.info("Servidor SocketIO inicializado")
-        
         # Crear el proveedor de IA de OpenAI
         ai_provider = OpenAIProvider(
             api_key=openai_api_key,
@@ -101,13 +101,19 @@ def main():
         app = WebApp(procesar_mensaje_use_case=procesar_mensaje_use_case, chatbot_service=chatbot_service)
         logger.info("Aplicación web inicializada")
         
-        # Ejecutar la aplicación
+        # Inicializar el servidor WebSocket/Socket.IO
+        socketio_server = init_socketio_server(app.app, support_repository)
+        logger.info(f"Servidor Socket.IO inicializado")
+        
+        # Asegurar que el servidor escucha en todas las interfaces
         host = os.getenv("HOST", "0.0.0.0")
         port = int(os.getenv("PORT", "3200"))
         debug = os.getenv("DEBUG", "False").lower() == "true"
         
         logger.info(f"Iniciando servidor en {host}:{port} (debug={debug})")
-        app.run(host=host, port=port, debug=debug)
+        
+        # Usar gevent para la ejecución con Socket.IO
+        socketio_server.run(app.app, host=host, port=port, debug=debug)
         
     except Exception as e:
         logger.error(f"Error al iniciar la aplicación: {e}", exc_info=True)

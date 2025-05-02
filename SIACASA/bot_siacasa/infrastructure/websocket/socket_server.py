@@ -16,7 +16,7 @@ class ChatWebSocketServer:
     Servidor WebSocket para chat en tiempo real entre usuarios y agentes de soporte.
     """
     
-    def __init__(self, host="0.0.0.0", port=8765):
+    def __init__(self, host="0.0.0.0", port=3200):
         """
         Inicializa el servidor WebSocket.
         
@@ -264,7 +264,7 @@ class ChatWebSocketServer:
         # Generar ID de mensaje
         message_id = str(uuid.uuid4())
         timestamp = datetime.now().isoformat()
-        
+        logger.info(f"Distribuyendo mensaje: ticket_id={ticket_id}, sender_type={sender_type}, is_internal={is_internal}")
         # Crear mensaje
         message = {
             "type": "chat_message",
@@ -436,7 +436,14 @@ class ChatWebSocketServer:
         
         try:
             # Crear el servidor como una corrutina
-            coro = websockets.serve(self.handler, self.host, self.port)
+            # En socket_server.py, modifica la creación del servidor en _run_server
+            coro = websockets.serve(
+                self.handler, 
+                self.host, 
+                self.port,
+                # Agrega estas opciones para CORS
+                origins=["*"]  # O especifica los orígenes permitidos
+            )
             # Ejecutar la corrutina en el bucle y obtener el servidor
             self.server = loop.run_until_complete(coro)
             
@@ -460,7 +467,7 @@ class ChatWebSocketServer:
 # Instancia global del servidor
 chat_socket_server = None
 
-def init_websocket_server(host="0.0.0.0", port=8765, support_repository=None):
+def init_websocket_server(host="0.0.0.0", port=3200, support_repository=None):
     """
     Inicializa y devuelve la instancia global del servidor WebSocket.
     
