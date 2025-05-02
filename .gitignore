@@ -5,6 +5,7 @@ SIACASA/venv/
 .env.*
 !.env.example
 
+SIACASA/.env
 # Entorno virtual
 env/
 ENV/
