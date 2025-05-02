@@ -138,6 +138,7 @@ class EscalationService:
                 
         return failure_count
         
+    # Modify the create_ticket method in bot_siacasa/domain/services/escalation_service.py
     def create_ticket(self, conversacion: Conversacion, usuario: Usuario, razon: EscalationReason) -> Ticket:
         """
         Crea un nuevo ticket de soporte.
@@ -155,6 +156,61 @@ class EscalationService:
         # Determinar la prioridad del ticket
         prioridad = self._determine_priority(conversacion, razon)
         
+        # NUEVO: Extraer el código del banco de los metadatos de la conversación
+        bank_code = None
+        if hasattr(conversacion, 'metadata') and conversacion.metadata:
+            bank_code = conversacion.metadata.get('bank_code')
+        
+        # Create database session entry if needed
+        try:
+            # Check if conversation exists in database
+            query = "SELECT id FROM chatbot_sessions WHERE id = %s"
+            result = self.repository.db.fetch_one(query, (conversacion.id,))
+            
+            if not result:
+                # Create session in database
+                query = """
+                INSERT INTO chatbot_sessions (
+                    id, user_id, bank_code, start_time, message_count, metadata
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s
+                )
+                """
+                
+                # Extract bank code from metadata if available
+                bank_code = "default"
+                if hasattr(conversacion, 'metadata') and conversacion.metadata:
+                    bank_code = conversacion.metadata.get('bank_code', "default")
+                
+                # Count messages
+                message_count = len(conversacion.mensajes) if hasattr(conversacion, 'mensajes') else 0
+                
+                # Create metadata JSON
+                import json
+                metadata = json.dumps({
+                    'created_by': 'escalation_service',
+                    'from_memory_repository': True
+                })
+                
+                # Execute query
+                self.repository.db.execute(
+                    query,
+                    (
+                        conversacion.id,
+                        conversacion.usuario.id,
+                        bank_code,
+                        conversacion.fecha_inicio,
+                        message_count,
+                        metadata
+                    )
+                )
+                
+                logger.info(f"Created database session for conversation {conversacion.id}")
+                logger.info(f"Session created with ID: {conversacion.id}, User ID: {conversacion.usuario.id}, Bank Code: {bank_code}, Message Count: {message_count}")
+        except Exception as e:
+            logger.error(f"Error creating database session for conversation: {e}", exc_info=True)
+            raise
+        
         # Crear el ticket
         ticket = Ticket(
             id=ticket_id,
@@ -162,7 +218,8 @@ class EscalationService:
             usuario=usuario,
             estado=TicketStatus.PENDING,
             razon_escalacion=razon,
-            prioridad=prioridad
+            prioridad=prioridad,
+            metadata={"bank_code": bank_code} if bank_code else {}  # Incluir el bank_code en los metadatos
         )
         
         # Guardar el ticket en el repositorio
@@ -177,6 +234,70 @@ class EscalationService:
         
         logger.info(f"Nuevo ticket creado: {ticket_id}, Razón: {razon.value}, Prioridad: {prioridad}")
         return ticket
+    
+    # Add this method to the EscalationService class in bot_siacasa/domain/services/escalation_service.py
+
+    def _ensure_conversation_session_exists(self, conversacion):
+        """
+        Ensures that the conversation exists in the chatbot_sessions table before creating a ticket.
+        
+        Args:
+            conversacion: Conversation to check
+        
+        Returns:
+            True if session exists or was created, False otherwise
+        """
+        try:
+            # Check if conversation exists in database
+            query = "SELECT id FROM chatbot_sessions WHERE id = %s"
+            result = self.repository.db.fetch_one(query, (conversacion.id,))
+            
+            if result:
+                # Session already exists
+                return True
+            
+            # Create session in database
+            query = """
+            INSERT INTO chatbot_sessions (
+                id, user_id, bank_code, start_time, message_count, metadata
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s
+            )
+            """
+            
+            # Extract bank code from metadata if available
+            bank_code = "default"
+            if hasattr(conversacion, 'metadata') and conversacion.metadata:
+                bank_code = conversacion.metadata.get('bank_code', "default")
+            
+            # Count messages
+            message_count = len(conversacion.mensajes) if hasattr(conversacion, 'mensajes') else 0
+            
+            # Create metadata JSON
+            import json
+            metadata = json.dumps({
+                'created_by': 'escalation_service',
+                'from_memory_repository': True
+            })
+            
+            # Execute query
+            self.repository.db.execute(
+                query,
+                (
+                    conversacion.id,
+                    conversacion.usuario.id,
+                    bank_code,
+                    conversacion.fecha_inicio,
+                    message_count,
+                    metadata
+                )
+            )
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error ensuring conversation session exists: {e}", exc_info=True)
+            return False
     
     def _determine_priority(self, conversacion: Conversacion, razon: EscalationReason) -> int:
         """

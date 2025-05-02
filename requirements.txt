@@ -40,3 +40,6 @@ python-jose>=3.3.0
 
 PyJWT>=2.6.0
 flask_cors>=3.0.0
+
+websockets>=10.4.0
+Flask-SocketIO>=5.3.0

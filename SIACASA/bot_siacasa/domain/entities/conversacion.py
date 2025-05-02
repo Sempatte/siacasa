@@ -19,6 +19,10 @@ class Conversacion:
     fecha_ultima_actividad: datetime = field(default_factory=datetime.now)  # Fecha de última actividad
     metadata: Dict = field(default_factory=dict)  # Metadatos adicionales
     
+    def __post_init__(self):
+        if self.metadata is None:
+            self.metadata = {}
+    
     def agregar_mensaje(self, mensaje: Mensaje) -> None:
         """
         Agrega un mensaje a la conversación.

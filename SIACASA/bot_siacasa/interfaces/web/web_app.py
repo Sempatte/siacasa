@@ -9,6 +9,7 @@ from flask_cors import CORS  # Necesitarás instalar flask-cors
 
 from bot_siacasa.domain.banks_config import BANK_CONFIGS
 from bot_siacasa.application.use_cases.procesar_mensaje_use_case import ProcesarMensajeUseCase
+from bot_siacasa.infrastructure.websocket.socketio_server import get_socketio_server
 
 logger = logging.getLogger(__name__)
 
@@ -18,14 +19,16 @@ class WebApp:
     Aplicación web Flask para interactuar con el chatbot.
     """
     
-    def __init__(self, procesar_mensaje_use_case: ProcesarMensajeUseCase):
+    def __init__(self, procesar_mensaje_use_case: ProcesarMensajeUseCase, chatbot_service):
         """
         Inicializa la aplicación web.
         
         Args:
             procesar_mensaje_use_case: Caso de uso para procesar mensajes
+            chatbot_service: Servicio de chatbot para gestionar conversaciones
         """
         self.procesar_mensaje_use_case = procesar_mensaje_use_case
+        self.chatbot_service = chatbot_service
         
         # Crear aplicación Flask
         self.app = Flask(
@@ -162,6 +165,18 @@ class WebApp:
                 # Determinar el código del banco desde la solicitud o usar valor predeterminado
                 bank_code = datos.get('bank_code', 'default')
                 
+                # Obtener o crear la conversación
+                conversacion = self.chatbot_service.obtener_o_crear_conversacion(usuario_id)
+
+                # NUEVO: Asegurarse de que la conversación tenga el bank_code en sus metadatos
+                if hasattr(conversacion, 'metadata'):
+                    conversacion.metadata['bank_code'] = bank_code
+                elif hasattr(conversacion, 'metadata') and conversacion.metadata is None:
+                    conversacion.metadata = {'bank_code': bank_code}
+
+                # Guardar la conversación con los metadatos actualizados
+                self.chatbot_service.repository.guardar_conversacion(conversacion)
+                
                 # NUEVO: Verificar si hay una sesión activa para este usuario o crear una nueva
                 session_id = self._get_or_create_chat_session(usuario_id, bank_code)
                 
@@ -264,11 +279,14 @@ class WebApp:
             session_id = str(uuid.uuid4())
             
             query = """
-            INSERT INTO chatbot_sessions (id, user_id, bank_code, start_time, message_count)
-            VALUES (%s, %s, %s, %s, 0)
+            INSERT INTO chatbot_sessions (id, user_id, bank_code, start_time, message_count, metadata)
+            VALUES (%s, %s, %s, %s, 0, %s)
             """
-            
-            db.execute(query, (session_id, usuario_id, bank_code, datetime.now()))
+            datos = request.json
+            bank_code = datos.get('bank_code', 'default')
+            # Metadatos como JSON
+            metadata_json = json.dumps({"source": "web"})
+            db.execute(query, (session_id, usuario_id, bank_code, datetime.now(), metadata_json))
             logger.info(f"Nueva conversación iniciada: {session_id} para usuario {usuario_id} del banco {bank_code}")
             
             return session_id
@@ -312,5 +330,13 @@ class WebApp:
             debug: Modo debug
             **kwargs: Argumentos adicionales para Flask
         """
-        self.app.run(host=host, port=port, debug=debug, **kwargs)
+        # Obtener instancia de SocketIO
+        socketio_server = get_socketio_server()
+        
+        if socketio_server:
+            # Si hay SocketIO, usarlo para ejecutar la aplicación
+            socketio_server.run(self.app, host=host, port=port, debug=debug, **kwargs)
+        else:
+            # Si no hay SocketIO, ejecutar normalmente
+            self.app.run(host=host, port=port, debug=debug, **kwargs)
 

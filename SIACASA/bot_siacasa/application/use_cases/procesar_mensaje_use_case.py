@@ -57,7 +57,17 @@ class ProcesarMensajeUseCase:
                 return "Tu mensaje ha sido recibido. Un agente humano te responderá en breve. Por favor, ten paciencia."
             
             # NUEVO: Verificar si debe escalar a un humano
-            if hasattr(self.chatbot_service, 'check_for_escalation') and self.chatbot_service.check_for_escalation(mensaje_usuario, usuario_id):
+            escalation_result = False  # Initialize the variable here
+            if hasattr(self.chatbot_service, 'check_for_escalation'):
+                try:
+                    escalation_result = self.chatbot_service.check_for_escalation(mensaje_usuario, usuario_id)
+                    logger.info(f"Escalation check result: {escalation_result}")
+                except Exception as e:
+                    logger.error(f"Error al verificar escalación: {e}", exc_info=True)
+                    escalation_result = False  # Ensure it's false in case of error
+
+                
+            if escalation_result:
                 # La conversación ha sido escalada ahora
                 return "Tu consulta ha sido escalada a un agente humano. Un agente te atenderá lo antes posible. Mientras tanto, puedes seguir escribiendo y tu mensaje será visible para el agente cuando se conecte."
             

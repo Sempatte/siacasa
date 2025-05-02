@@ -53,6 +53,9 @@ class ChatbotService:
         self.escalation_service = None
         if support_repository:
             self.escalation_service = EscalationService(support_repository)
+            logger.info("Escalation service initialized successfully")
+        else:
+            logger.warning("Support repository not provided, escalation service not initialized")
         self.bank_config = {**default_config, **(bank_config or {})}
         # Mensaje de sistema que define el comportamiento del chatbot
         self.mensaje_sistema = Mensaje(
@@ -238,6 +241,7 @@ class ChatbotService:
         """
         # Si no hay servicio de escalación, no se puede escalar
         if not self.escalation_service:
+            logger.warning("Escalation service not initialized, cannot escalate")
             return False
         
         # Obtener conversación activa

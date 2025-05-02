@@ -429,19 +429,31 @@ class ChatWebSocketServer:
         """
         Ejecuta el servidor WebSocket en un bucle de eventos asyncio.
         """
+        # Crear un nuevo bucle de eventos
         loop = asyncio.new_event_loop()
+        # Establecerlo como el bucle activo para este hilo
         asyncio.set_event_loop(loop)
         
-        start_server = websockets.serve(self.handler, self.host, self.port)
-        self.server = loop.run_until_complete(start_server)
-        
         try:
+            # Crear el servidor como una corrutina
+            coro = websockets.serve(self.handler, self.host, self.port)
+            # Ejecutar la corrutina en el bucle y obtener el servidor
+            self.server = loop.run_until_complete(coro)
+            
+            # Mantener el bucle corriendo indefinidamente
+            logger.info(f"Servidor WebSocket iniciado en {self.host}:{self.port}")
             loop.run_forever()
         except Exception as e:
             logger.error(f"Error en el servidor WebSocket: {e}", exc_info=True)
         finally:
-            self.server.close()
-            loop.run_until_complete(self.server.wait_closed())
+            # Limpieza cuando el bucle se detiene
+            if hasattr(self, 'server') and self.server:
+                # Cerrar todas las conexiones
+                self.server.close()
+                # Esperar a que se cierren todas las conexiones
+                loop.run_until_complete(self.server.wait_closed())
+            
+            # Cerrar el bucle
             loop.close()
 
 

@@ -5,6 +5,7 @@ import logging
 from flask import Flask, jsonify, render_template, redirect, url_for, flash, request, session
 from functools import wraps
 from dotenv import load_dotenv
+from jinja2 import ChoiceLoader, FileSystemLoader
 
 # Importar módulos del panel de administración
 from admin_panel.auth.auth_controller import auth_blueprint
@@ -38,11 +39,20 @@ class AdminPanel:
         Inicializa la aplicación del panel de administración.
         """
         # Crear aplicación Flask
-        self.app = Flask(
+        """self.app = Flask(
             __name__,
             template_folder=os.path.join(os.path.dirname(__file__), 'templates'),
             static_folder=os.path.join(os.path.dirname(__file__), 'static')
-        )
+        )"""
+        template_folders = [
+            os.path.join(os.path.dirname(__file__), 'templates'),
+            os.path.join(os.path.dirname(__file__), 'support', 'templates')
+        ]
+        self.app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
+        self.app.jinja_loader = ChoiceLoader([FileSystemLoader(folder) for folder in template_folders])
+        
+        # Configurar rutas de plantillas
+        
         
         # Configurar clave secreta para sesiones
         self.app.secret_key = os.getenv('ADMIN_SECRET_KEY', os.urandom(24))

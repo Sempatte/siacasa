@@ -97,7 +97,12 @@ class SupportRepository:
         try:
             # Obtener el código del banco desde la conversación
             bank_code = None
-            if hasattr(ticket.conversacion, 'metadata') and ticket.conversacion.metadata:
+            # 1. Intentar obtener desde metadatos del ticket
+            if ticket.metadata and ticket.metadata.get('bank_code'):
+                bank_code = ticket.metadata.get('bank_code')
+            
+            # 2. Si no, intentar obtener desde metadatos de la conversación
+            elif hasattr(ticket.conversacion, 'metadata') and ticket.conversacion.metadata:
                 bank_code = ticket.conversacion.metadata.get('bank_code')
             
             # Convertir enums a strings
@@ -124,7 +129,8 @@ class SupportRepository:
                 agent_name = EXCLUDED.agent_name,
                 notes = EXCLUDED.notes,
                 priority = EXCLUDED.priority,
-                metadata = EXCLUDED.metadata
+                metadata = EXCLUDED.metadata,
+                bank_code = EXCLUDED.bank_code
             """
             
             self.db.execute(
@@ -147,11 +153,165 @@ class SupportRepository:
                 )
             )
             
-            logger.info(f"Ticket guardado: {ticket.id}")
+            logger.info(f"Ticket guardado: {ticket.id} para banco: {bank_code}")
             
         except Exception as e:
             logger.error(f"Error al guardar ticket {ticket.id}: {e}", exc_info=True)
             raise
+    
+    def _obtener_conversacion(self, conversacion_id: str) -> Optional[Conversacion]:
+        """
+        Obtiene una conversación por su ID.
+        
+        Args:
+            conversacion_id: ID de la conversación
+            
+        Returns:
+            Conversación o None si no existe
+        """
+        try:
+            # Obtener información básica de la conversación
+            query = """
+            SELECT 
+                id, user_id, start_time, end_time, message_count, metadata,
+                last_activity_time
+            FROM 
+                chatbot_sessions
+            WHERE 
+                id = %s
+            """
+            
+            conversacion_data = self.db.fetch_one(query, (conversacion_id,))
+            
+            if not conversacion_data:
+                logger.warning(f"Conversación no encontrada: {conversacion_id}")
+                return None
+            
+            # Obtener usuario
+            usuario = self._obtener_usuario(conversacion_data['user_id'])
+            
+            if not usuario:
+                logger.warning(f"Usuario no encontrado para conversación: {conversacion_id}")
+                usuario_id = conversacion_data['user_id']
+                # Crear un usuario básico en caso de error
+                from bot_siacasa.domain.entities.usuario import Usuario
+                usuario = Usuario(id=usuario_id)
+            
+            # Crear objeto Conversacion
+            from bot_siacasa.domain.entities.conversacion import Conversacion
+            from bot_siacasa.domain.entities.mensaje import Mensaje
+            
+            last_activity = conversacion_data.get('last_activity_time') or conversacion_data['start_time']
+            
+            conversacion = Conversacion(
+                id=conversacion_id,
+                usuario=usuario,
+                fecha_inicio=conversacion_data['start_time'],
+                fecha_fin=conversacion_data['end_time'],
+                fecha_ultima_actividad=last_activity,
+                metadata=json.loads(conversacion_data['metadata']) if conversacion_data['metadata'] and not isinstance(conversacion_data['metadata'], dict) else conversacion_data['metadata'] or {}
+            )
+            
+            # Obtener mensajes
+            # Primero intentamos con chat_messages
+            try:
+                query = """
+                SELECT 
+                    role, content, timestamp, metadata
+                FROM 
+                    chat_messages
+                WHERE 
+                    conversation_id = %s
+                ORDER BY 
+                    timestamp ASC
+                """
+                
+                mensajes_data = self.db.fetch_all(query, (conversacion_id,))
+                
+                # Si no hay tabla de chat_messages o no hay mensajes, crear una lista vacía
+                if not mensajes_data:
+                    mensajes_data = []
+                    
+                # Agregar mensajes
+                for mensaje_data in mensajes_data:
+                    mensaje = Mensaje(
+                        role=mensaje_data['role'],
+                        content=mensaje_data['content'],
+                        timestamp=mensaje_data['timestamp'],
+                        metadata=json.loads(mensaje_data['metadata']) if mensaje_data['metadata'] and not isinstance(mensaje_data['metadata'], dict) else mensaje_data['metadata'] or None
+                    )
+                    conversacion.mensajes.append(mensaje)
+                    
+            except Exception as e:
+                # Si hay error al obtener mensajes, registrarlo pero continuar
+                logger.warning(f"Error al obtener mensajes de conversación {conversacion_id}: {e}")
+                # Agregar al menos un mensaje de sistema para que la conversación tenga contenido
+                mensaje_sistema = Mensaje(
+                    role="system",
+                    content="Soy SIACASA, tu asistente bancario virtual."
+                )
+                conversacion.mensajes.append(mensaje_sistema)
+            
+            return conversacion
+            
+        except Exception as e:
+            logger.error(f"Error al obtener conversación {conversacion_id}: {e}", exc_info=True)
+            return None
+        
+    def _obtener_usuario(self, usuario_id: str) -> Optional[Usuario]:
+        """
+        Obtiene un usuario por su ID.
+        
+        Args:
+            usuario_id: ID del usuario
+            
+        Returns:
+            Usuario o None si no existe
+        """
+        try:
+            # Crear objeto Usuario básico
+            # No consultamos la base de datos ya que no tenemos tabla de usuarios
+            from bot_siacasa.domain.entities.usuario import Usuario
+            
+            usuario = Usuario(id=usuario_id)
+            
+            # Intentar obtener información adicional del usuario si está disponible
+            # desde la tabla de sesiones de chatbot
+            query = """
+            SELECT 
+                DISTINCT user_id, metadata
+            FROM 
+                chatbot_sessions
+            WHERE 
+                user_id = %s
+            LIMIT 1
+            """
+            
+            session_data = self.db.fetch_one(query, (usuario_id,))
+            
+            if session_data and session_data.get('metadata'):
+                # Extraer datos posibles del usuario desde los metadatos de la sesión
+                metadata = json.loads(session_data['metadata']) if isinstance(session_data['metadata'], str) else session_data['metadata']
+                
+                if metadata and isinstance(metadata, dict):
+                    # Si hay datos de usuario en los metadatos, los utilizamos
+                    if 'usuario' in metadata:
+                        usuario_info = metadata['usuario']
+                        if isinstance(usuario_info, dict):
+                            if 'nombre' in usuario_info:
+                                usuario.nombre = usuario_info['nombre']
+                            if 'datos' in usuario_info:
+                                usuario.datos = usuario_info['datos']
+                            if 'preferencias' in usuario_info:
+                                usuario.preferencias = usuario_info['preferencias']
+            
+            return usuario
+            
+        except Exception as e:
+            logger.error(f"Error al obtener usuario {usuario_id}: {e}", exc_info=True)
+            # En caso de error, devolver un usuario básico
+            from bot_siacasa.domain.entities.usuario import Usuario
+            return Usuario(id=usuario_id)
     
     def obtener_ticket(self, ticket_id: str) -> Optional[Ticket]:
         """

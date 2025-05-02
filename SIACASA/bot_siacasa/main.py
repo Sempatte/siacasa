@@ -29,7 +29,8 @@ from bot_siacasa.domain.banks_config import BANK_CONFIGS
 from bot_siacasa.interfaces.web.web_app import WebApp
 from bot_siacasa.domain.entities.analisis_sentimiento import AnalisisSentimiento
 from bot_siacasa.infrastructure.db.support_repository import SupportRepository
-from bot_siacasa.infrastructure.websocket.socket_server import init_websocket_server
+from bot_siacasa.infrastructure.websocket.socketio_server import init_socketio_server
+from bot_siacasa.infrastructure.db.neondb_connector import NeonDBConnector  
 
 def main():
     """Función principal para iniciar la aplicación."""
@@ -52,13 +53,21 @@ def main():
         repository = MemoryRepository()
         logger.info("Repositorio en memoria inicializado")
         
+        # Inicializar el conector de base de datos
+        db_connector = NeonDBConnector(
+            host=os.getenv("NEONDB_HOST"),
+            database=os.getenv("NEONDB_DATABASE"),
+            user=os.getenv("NEONDB_USER"),
+            password=os.getenv("NEONDB_PASSWORD")
+        )
+        
         # Inicializar repositorio de soporte
         support_repository = SupportRepository(db_connector)
         logger.info("Repositorio de soporte inicializado")
         
          # Iniciar servidor WebSocket para chat en tiempo real
-        websocket_server = init_websocket_server(host="0.0.0.0", port=8765, support_repository=support_repository)
-        logger.info("Servidor WebSocket iniciado en 0.0.0.0:8765")
+        socketio_server = init_socketio_server(support_repository=support_repository)
+        logger.info("Servidor SocketIO inicializado")
         
         # Crear el proveedor de IA de OpenAI
         ai_provider = OpenAIProvider(
@@ -89,7 +98,7 @@ def main():
         logger.info("Caso de uso para procesar mensajes inicializado")
         
         # Crear la aplicación web
-        app = WebApp(procesar_mensaje_use_case=procesar_mensaje_use_case)
+        app = WebApp(procesar_mensaje_use_case=procesar_mensaje_use_case, chatbot_service=chatbot_service)
         logger.info("Aplicación web inicializada")
         
         # Ejecutar la aplicación
