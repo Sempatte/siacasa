@@ -84,6 +84,19 @@ class SupportRepository:
             )
             """)
             
+            self.db.execute("""
+            CREATE TABLE IF NOT EXISTS ticket_user_mapping (
+                ticket_id UUID PRIMARY KEY,
+                user_id VARCHAR(100) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """)
+            
+            # Índice para búsquedas rápidas por usuario
+            self.db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_ticket_user_user_id ON ticket_user_mapping(user_id);
+            """)
+            
             logger.info("Tablas de soporte inicializadas correctamente")
         except Exception as e:
             logger.error(f"Error al inicializar tablas de soporte: {e}", exc_info=True)
@@ -154,6 +167,24 @@ class SupportRepository:
                     bank_code
                 )
             )
+            
+            # Guardar la relación ticket-usuario en la tabla de mapeo
+            try:
+                query = """
+                INSERT INTO ticket_user_mapping (ticket_id, user_id)
+                VALUES (%s, %s)
+                ON CONFLICT (ticket_id) DO NOTHING
+                """
+                
+                self.db.execute(query, (ticket.id, ticket.usuario.id))
+                logger.info(f"Relación ticket-usuario guardada: {ticket.id} - {ticket.usuario.id}")
+                
+                # Actualizar la caché local si existe
+                if hasattr(self, 'ticket_users'):
+                    self.ticket_users[ticket.id] = ticket.usuario.id
+                    
+            except Exception as e:
+                logger.warning(f"Error al guardar relación ticket-usuario: {e}")
             
             logger.info(f"Ticket guardado: {ticket.id} para banco: {bank_code}")
             
@@ -308,6 +339,29 @@ class SupportRepository:
             
         except Exception as e:
             logger.error(f"Error al obtener conversación {conversacion_id}: {e}", exc_info=True)
+            return None
+        
+    def obtener_usuario_por_ticket(self, ticket_id: str) -> Optional[str]:
+        """
+        Obtiene el ID del usuario asociado a un ticket.
+        
+        Args:
+            ticket_id: ID del ticket
+            
+        Returns:
+            ID del usuario o None si no existe
+        """
+        try:
+            # Intentar obtener desde la tabla de tickets
+            query = "SELECT user_id FROM support_tickets WHERE id = %s"
+            result = self.db.fetch_one(query, (ticket_id,))
+            
+            if result and 'user_id' in result:
+                return result['user_id']
+            
+            return None
+        except Exception as e:
+            logger.error(f"Error al obtener usuario por ticket: {e}", exc_info=True)
             return None
         
     def _obtener_usuario(self, usuario_id: str) -> Optional[Usuario]:

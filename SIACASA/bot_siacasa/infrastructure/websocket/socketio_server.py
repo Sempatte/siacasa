@@ -8,6 +8,7 @@ from typing import Dict, List, Set
 
 from flask import Flask, request
 from flask_socketio import SocketIO, emit, join_room, leave_room
+import socket  # Añadida esta importación para obtener el hostname
 
 logger = logging.getLogger(__name__)
 
@@ -75,10 +76,18 @@ class ChatSocketIOServer:
         @self.socketio.on('connect')
         def handle_connect():
             logger.info(f"Nueva conexión establecida: {request.sid}")
+            # Información detallada de la conexión
+            logger.info(f"Información de conexión: {request.headers}")
+            logger.info(f"URL de conexión: {request.url}")
+            logger.info(f"Argumentos de conexión: {request.args}")
+            
+            # Enviar mensaje de bienvenida con detalles del servidor
             emit('welcome', {
                 'status': 'success',
-                'message': 'Conexión establecida',
-                'timestamp': datetime.now().isoformat()
+                'message': 'Conexión establecida al servidor Socket.IO',
+                'server_time': datetime.now().isoformat(),
+                'server_id': socket.gethostname() if hasattr(socket, 'gethostname') else 'unknown',
+                'client_id': request.sid
             })
         
         @self.socketio.on('disconnect')
@@ -182,8 +191,8 @@ class ChatSocketIOServer:
                 ticket_id = data.get('ticket_id')
                 content = data.get('content')
                 sender_id = data.get('sender_id')
-                sender_name = data.get('sender_name', 'Agente')
-                sender_type = data.get('sender_type', 'agent')
+                sender_name = data.get('sender_name', 'Usuario')
+                sender_type = data.get('sender_type', 'user')  # Por defecto, asumir user si no se especifica
                 is_internal = data.get('is_internal', False)
                 
                 if not all([ticket_id, content, sender_id]):
@@ -211,10 +220,10 @@ class ChatSocketIOServer:
                     'timestamp': timestamp
                 }
                 
-                # Guardar mensaje en la base de datos
+                # Guardar mensaje en la base de datos si es un mensaje de agente
                 if sender_type == "agent" and self.support_repository:
                     try:
-                        logger.info(f"Intentando guardar mensaje de agente: {ticket_id}, {sender_id}, {sender_name}")
+                        logger.info(f"Guardando mensaje de agente: {ticket_id}, {sender_id}, {sender_name}")
                         
                         if not hasattr(self.support_repository, 'agregar_mensaje_agente'):
                             logger.error("El repositorio no tiene el método 'agregar_mensaje_agente'")
@@ -240,29 +249,57 @@ class ChatSocketIOServer:
                         })
                         return
                 
+                # Si es mensaje de usuario, agregarlo al historial de conversación
+                if sender_type == "user":
+                    try:
+                        # Obtener ticket
+                        if hasattr(self.support_repository, 'obtener_ticket'):
+                            ticket = self.support_repository.obtener_ticket(ticket_id)
+                            if ticket:
+                                # Crear mensaje
+                                from bot_siacasa.domain.entities.mensaje import Mensaje
+                                mensaje = Mensaje(
+                                    role="user",
+                                    content=content
+                                )
+                                
+                                # Agregar a la conversación
+                                ticket.conversacion.agregar_mensaje(mensaje)
+                                
+                                # Guardar cambios
+                                self.support_repository.guardar_ticket(ticket)
+                                logger.info(f"Mensaje de usuario agregado a la conversación del ticket {ticket_id}")
+                    except Exception as e:
+                        logger.error(f"Error al agregar mensaje de usuario a la conversación: {e}", exc_info=True)
+                
                 # Emitir mensaje a todos los suscriptores del ticket
                 ticket_room = f'ticket_{ticket_id}'
                 logger.info(f"Emitiendo mensaje a la sala {ticket_room}")
                 
-                # Si el mensaje no es interno, también enviarlo al usuario directamente
-                if not is_internal and ticket_id in self.ticket_users:
-                    user_id = self.ticket_users[ticket_id]
-                    user_room = f'user_{user_id}'
-                    
-                    # También emitir a la sala del usuario (widget del chatbot)
-                    logger.info(f"Emitiendo mensaje también a la sala {user_room}")
-                    
-                    # Enviar tanto por socketio como al endpoint REST
-                    self.socketio.emit('chat_message', message, room=user_room)
-                    
-                    # Si hay conexión directa con el widget, intentar enviar directamente
-                    if user_id in self.user_connections:
-                        logger.info(f"Usuario {user_id} está conectado, enviando mensaje directo")
-                        user_sid = self.user_connections[user_id]
-                        self.socketio.emit('direct_message', message, room=user_sid)
-                
                 # Broadcast normal a todos en la sala del ticket
                 self.socketio.emit('chat_message', message, room=ticket_room, include_self=False)
+                
+                # Si el mensaje es de un agente, enviarlo también al usuario
+                if sender_type == "agent" and not is_internal:
+                    # Obtener ID de usuario del ticket
+                    user_id = None
+                    if hasattr(self.support_repository, 'obtener_usuario_por_ticket'):
+                        user_id = self.support_repository.obtener_usuario_por_ticket(ticket_id)
+                    
+                    if user_id:
+                        # Emitir a la sala del usuario
+                        user_room = f'user_{user_id}'
+                        logger.info(f"Emitiendo mensaje al usuario {user_id} en sala {user_room}")
+                        self.socketio.emit('widget_message', {
+                            'user_id': user_id,
+                            'message': message
+                        }, room=user_room)
+                        
+                        # Enviar directamente si está conectado
+                        if user_id in self.user_connections:
+                            user_sid = self.user_connections[user_id]
+                            logger.info(f"Enviando mensaje directo al usuario {user_id}")
+                            self.socketio.emit('direct_message', message, room=user_sid)
                 
                 # Enviar confirmación al remitente
                 emit('message_sent', {
@@ -271,7 +308,6 @@ class ChatSocketIOServer:
                     'status': 'success'
                 })
                 
-                # Registrar mensaje enviado exitosamente
                 logger.info(f"Mensaje enviado correctamente a ticket {ticket_id}")
                 
             except Exception as e:
@@ -280,7 +316,6 @@ class ChatSocketIOServer:
                     'message': f'Error en el servidor: {str(e)}',
                     'timestamp': datetime.now().isoformat()
                 })
-        
         @self.socketio.on('typing')
         def handle_typing(data):
             ticket_id = data.get('ticket_id')
@@ -376,7 +411,8 @@ def init_socketio_server(app=None, support_repository=None):
             ping_timeout=60,
             ping_interval=25,
             logger=True,  # Habilitar logging detallado
-            engineio_logger=True  # Habilitar logging detallado de engineio
+            engineio_logger=True,  # Habilitar logging detallado de engineio
+            max_http_buffer_size=10 * 1024 * 1024,  # Tamaño máximo del buffer HTTP
         )
         
         # Luego crear el servidor con la clase wrapper

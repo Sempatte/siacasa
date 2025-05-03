@@ -10,6 +10,7 @@ from flask_cors import CORS  # Necesitarás instalar flask-cors
 from bot_siacasa.domain.banks_config import BANK_CONFIGS
 from bot_siacasa.application.use_cases.procesar_mensaje_use_case import ProcesarMensajeUseCase
 from bot_siacasa.infrastructure.websocket.socketio_server import get_websocket_server as get_socketio_server
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -298,9 +299,6 @@ class WebApp:
             from bot_siacasa.infrastructure.db.neondb_connector import NeonDBConnector
             db = NeonDBConnector()
             
-            # PROBLEMA DETECTADO: La consulta solo busca sesiones creadas en los últimos 30 minutos
-            # SOLUCIÓN: Buscar cualquier sesión activa (sin end_time) independientemente de cuándo se creó
-            
             # Verificar si hay una sesión activa para este usuario (sin end_time)
             query = """
             SELECT id FROM chatbot_sessions 
@@ -321,8 +319,11 @@ class WebApp:
             INSERT INTO chatbot_sessions (id, user_id, bank_code, start_time, message_count, metadata)
             VALUES (%s, %s, %s, %s, 0, %s)
             """
-            datos = request.json
-            bank_code = datos.get('bank_code', 'default')
+            
+            # Usar el bank_code pasado como parámetro en lugar de obtenerlo de la solicitud
+            # datos = request.json
+            # bank_code = datos.get('bank_code', 'default')  <-- Esta línea debe ser eliminada
+            
             # Metadatos como JSON
             metadata_json = json.dumps({"source": "web"})
             db.execute(query, (session_id, usuario_id, bank_code, datetime.now(), metadata_json))

@@ -30,6 +30,7 @@
 
     console.log("Configuración final del widget:", config);
     const theme = config.theme;
+    const processedMessageIds = new Set();
 
     // Iconos profesionales con Feather Icons
     const iconSet = {
@@ -923,20 +924,39 @@
         if (!socket) return;
 
         socket.on("connect", () => {
-            console.log("Conectado a Socket.IO");
+            console.log("Conectado a Socket.IO con ID:", socket.id);
 
-            // Si hay un ticket activo, suscribirse
+            // Si hay un ticket activo, suscribirse inmediatamente
             if (activeTicketId) {
+                console.log(`Suscripción al ticket: ${activeTicketId}`);
                 socket.emit("subscribe_ticket", {
                     ticket_id: activeTicketId,
                     role: "user",
                 });
             }
+            console.log("Estado de conexión:", socket.connected ? "Conectado" : "Desconectado");
+
+            // Guardar que estamos conectados
+            sessionStorage.setItem('socketConnected', 'true');
+
+            // Si hay un ticket activo, suscribirse inmediatamente después de reconexión
+            if (activeTicketId) {
+                console.log(`Suscripción al ticket: ${activeTicketId}`);
+                setTimeout(() => {
+                    socket.emit("subscribe_ticket", {
+                        ticket_id: activeTicketId,
+                        role: "user",
+                    });
+                }, 500); // Pequeño retraso para asegurar que la conexión esté estable
+            }
 
             // Suscribirse como usuario
-            socket.emit("subscribe_user", {
-                user_id: sessionId,
-            });
+            console.log(`Suscripción como usuario: ${sessionId}`);
+            setTimeout(() => {
+                socket.emit("subscribe_user", {
+                    user_id: sessionId,
+                });
+            }, 300); // Retraso aún mayor para esta operación
         });
 
         socket.on("disconnect", () => {
@@ -947,36 +967,63 @@
             console.error("Error de conexión Socket.IO:", error);
         });
 
-        socket.on('chat_message', async function(data) {
+    
+
+        // Manejador para mensajes de chat generales
+        socket.on('chat_message', function(data) {
             console.log('Mensaje recibido por socket:', data);
             
-            // Si recibimos un ticket_id por primera vez, suscribirnos a ese ticket
-            if (data.ticket_id && !activeTicketId) {
-                activeTicketId = data.ticket_id;
-                console.log('Nuevo ticket asignado, suscribiéndose:', activeTicketId);
-                
-                // Suscribirse al ticket
-                socket.emit('subscribe_ticket', {
-                    ticket_id: activeTicketId,
-                    role: 'user'
-                });
-            }
-            
-            // Procesar el mensaje si es del agente y no es interno
+            // Si el mensaje es de un agente y no es interno, mostrarlo en el chat
             if (data.sender_type === 'agent' && !data.is_internal) {
                 hideTypingIndicator();
-                await addMessage(data.content, false);
+                addMessageToChat(
+                    data.content, 
+                    'assistant', 
+                    data.sender_name || 'Agente',
+                    new Date(data.timestamp)
+                );
             }
         });
 
-        socket.on('direct_message', async function(data) {
+        // Manejador para mensajes directos
+        socket.on('direct_message', function (data) {
             console.log('Mensaje directo recibido:', data);
-            
+
+            // Si el mensaje es de un agente y no es interno, mostrarlo en el chat
             if (data.sender_type === 'agent' && !data.is_internal) {
                 hideTypingIndicator();
-                await addMessage(data.content, false);
+                addMessageToChat(
+                    data.content, 
+                    'assistant', 
+                    data.sender_name || 'Agente',
+                    new Date(data.timestamp)
+                );
             }
         });
+
+        // Manejador para mensajes del widget
+        socket.on('widget_message', function(data) {
+            console.log('Mensaje de widget recibido:', data);
+            
+            // Verificar si este mensaje es para este usuario
+            if (data.user_id === sessionId) {
+                console.log("Mensaje recibido del agente:", data.message);
+                
+                // Si el mensaje no es interno, mostrarlo en el chat
+                if (data.message && !data.message.is_internal) {
+                    hideTypingIndicator();
+                    addMessageToChat(
+                        data.message.content, 
+                        'assistant', 
+                        data.message.sender_name || 'Agente',
+                        new Date(data.message.timestamp)
+                    );
+                }
+            }
+        });
+
+
+        
 
         socket.on("typing", (data) => {
             if (data.sender_type === "agent" && data.is_typing) {
@@ -986,19 +1033,19 @@
             }
         });
 
-        socket.on('agent_connected', function(data) {
+        socket.on('agent_connected', function (data) {
             console.log('Agente conectado al ticket:', data);
             // Opcionalmente mostrar mensaje al usuario
-            addMessage('Un agente se ha conectado a la conversación.', false);
+            addMessageToChat('Un agente se ha conectado a la conversación.', false, 'Agente', new Date(data.message.timestamp));
         });
 
-        socket.on('error', function(error) {
+        socket.on('error', function (error) {
             console.error('Error en Socket.IO:', error);
         });
 
-        socket.on('reconnect', function() {
+        socket.on('reconnect', function () {
             console.log('Socket.IO reconectado');
-            
+
             // Volver a suscribirse al ticket si teníamos uno activo
             if (activeTicketId) {
                 console.log('Volviendo a suscribirse al ticket:', activeTicketId);
@@ -1007,72 +1054,100 @@
                     role: 'user'
                 });
             }
-            
+
             // También volver a suscribirse como usuario
             socket.emit('subscribe_user', {
                 user_id: sessionId
             });
         });
-        
+
     }
 
     // ======== FUNCIONES PRINCIPALES ========
 
+
     /**
      * Añade un mensaje al chat
-     * @param {string} message - Mensaje a añadir
-     * @param {boolean} isUser - Indica si el mensaje es del usuario
+     * @param {string} content - Contenido del mensaje
+     * @param {string|boolean} role - Rol del mensaje ('user', 'assistant') o booleano (true=user, false=assistant)
+     * @param {string} senderName - Nombre del remitente (opcional)
+     * @param {Date} timestamp - Marca de tiempo (opcional)
      */
-    async function addMessage(message, isUser) {
-        if (!messagesContainer) return;
-
-        const messageDiv = document.createElement("div");
-        messageDiv.className = `siacasa-message ${isUser ? "siacasa-message--user" : "siacasa-message--bot"
-            }`;
-
-        const time = formatTime();
-
-        // Procesar el mensaje con Markdown si viene del bot
-        let messageContent = message;
-        if (!isUser) {
-            try {
-                // Procesar con Markdown
-                messageContent = await processMarkdown(message);
-            } catch (error) {
-                console.error("Error al procesar mensaje:", error);
-                messageContent = message; // Usar texto sin formato en caso de error
+    async function addMessageToChat(content, role, senderName, timestamp) {
+        try {
+            // Determinar el rol correcto (manejar tanto string como boolean)
+            let messageRole = role;
+            if (typeof role === 'boolean') {
+                messageRole = role ? 'user' : 'assistant';
             }
+
+            // Obtener el contenedor de mensajes
+            const messagesContainer = document.getElementById('siacasaMessages');
+            if (!messagesContainer) {
+                console.error('Contenedor de mensajes no encontrado');
+                return;
+            }
+
+            // Crear elemento para el mensaje
+            const messageElement = document.createElement('div');
+            messageElement.className = `siacasa-message siacasa-message--${messageRole === 'user' ? 'user' : 'bot'}`;
+
+            // Formatear fecha si existe, o usar hora actual
+            const time = timestamp ? new Date(timestamp) : new Date();
+            const timeFormatted = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            // Determinar nombre del remitente si no se proporciona
+            const name = senderName || (messageRole === 'user' ? 'Tú' : config.botName);
+
+            // Procesar markdown si el mensaje es del bot
+            let processedContent = content;
+            if (messageRole === 'assistant' || messageRole === 'bot' || messageRole === false) {
+                if (window.marked && window.DOMPurify) {
+                    processedContent = window.DOMPurify.sanitize(window.marked.parse(content));
+                } else {
+                    processedContent = processMarkdownSimple(content);
+                }
+            }
+
+            // Estructura del mensaje
+            messageElement.innerHTML = `
+                ${processedContent}
+                <div class="siacasa-message__time">${timeFormatted}</div>
+            `;
+
+            // Añadir al contenedor
+            messagesContainer.appendChild(messageElement);
+
+            // Scroll al final del chat
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+        } catch (error) {
+            console.error('Error al añadir mensaje al chat:', error);
         }
-
-        messageDiv.innerHTML = `
-            <div>${messageContent}</div>
-            <div class="siacasa-message__time">${time}</div>
-        `;
-
-        messagesContainer.appendChild(messageDiv);
-
-        // Scroll al final
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
 
     /**
-     * Muestra el indicador de escritura
+     * Función para ocultar el indicador de escritura
+     */
+    function hideTypingIndicator() {
+        const typingIndicator = document.getElementById('siacasaTyping');
+        if (typingIndicator) {
+            typingIndicator.style.display = 'none';
+        }
+    }
+
+    /**
+     * Función para mostrar el indicador de escritura
      */
     function showTypingIndicator() {
+        const typingIndicator = document.getElementById('siacasaTyping');
         if (typingIndicator) {
-            typingIndicator.style.display = "flex";
+            typingIndicator.style.display = 'flex';
+            // Asegurar que se vea al hacer scroll
+            const messagesContainer = document.getElementById('siacasaMessages');
             if (messagesContainer) {
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }
-        }
-    }
-
-    /**
-     * Oculta el indicador de escritura
-     */
-    function hideTypingIndicator() {
-        if (typingIndicator) {
-            typingIndicator.style.display = "none";
         }
     }
 
@@ -1119,7 +1194,7 @@
             hideTypingIndicator();
 
             if (data.status === "success") {
-                await addMessage(data.respuesta, false);
+                await addMessageToChat(data.respuesta, 'assistant', data.sender_name, new Date(data.timestamp));
 
                 // Si la respuesta incluye un ID de usuario, actualizarlo
                 if (data.usuario_id) {
@@ -1131,7 +1206,7 @@
                 if (data.ticket_id && !activeTicketId) {
                     activeTicketId = data.ticket_id;
                     console.log(`Ticket ID asignado: ${activeTicketId}`);
-
+                    localStorage.setItem("siacasa_active_ticket", activeTicketId);
                     // Suscribirse al ticket si Socket.IO está disponible
                     if (socket && socket.connected) {
                         socket.emit("subscribe_ticket", {
@@ -1146,9 +1221,11 @@
         } catch (error) {
             console.error("Error en la comunicación con el chatbot:", error);
             hideTypingIndicator();
-            await addMessage(
+            await addMessageToChat(
                 "Lo siento, ha ocurrido un error en la comunicación. Por favor, intenta de nuevo más tarde.",
-                false
+                'assistant',
+                'Asistente',
+                new Date()
             );
         }
     }
@@ -1190,7 +1267,7 @@
                         const msgTimestamp = new Date(msg.timestamp).getTime();
                         if (msgTimestamp > lastMessageTimestamp) {
                             if (msg.sender_type === "agent") {
-                                await addMessage(msg.content, false);
+                                await addMessageToChat(msg.content, false);
                             }
 
                             // Actualizar timestamp del último mensaje
@@ -1218,6 +1295,12 @@
                 localStorage.setItem("siacasa_session_id", sessionId);
             }
 
+            // Recuperar ticket activo si existe
+            activeTicketId = localStorage.getItem("siacasa_active_ticket");
+            if (activeTicketId) {
+                console.log(`Recuperado ticket activo: ${activeTicketId}`);
+            }
+
             // Añadir estilos
             addStyles();
 
@@ -1243,7 +1326,7 @@
 
             if (!wasGreetedToday) {
                 // Añadir mensaje inicial del bot
-                await addMessage(config.initialMessage, false);
+                await addMessageToChat(config.initialMessage, false);
                 // Guardar en localStorage que ya se mostró el mensaje
                 localStorage.setItem(storageKey, "true");
             } else {
@@ -1251,7 +1334,7 @@
                 const hasMessages = messagesContainer.children.length > 0;
                 // Si no hay mensajes (primera vez que se abre), mostrar mensaje inicial
                 if (!hasMessages) {
-                    await addMessage(config.initialMessage, false);
+                    await addMessageToChat(config.initialMessage, false);
                 }
             }
 
@@ -1278,10 +1361,13 @@
                 if (!message) return;
 
                 // Añadir mensaje del usuario
-                addMessage(message, true);
+                addMessageToChat(message, 'user', 'Tú', new Date());
 
                 // Limpiar campo de entrada
                 inputField.value = "";
+
+                // Ajustar altura del input a su tamaño por defecto
+                inputField.style.height = 'auto';
 
                 // Enviar mensaje al backend
                 sendMessage(message);
@@ -1327,7 +1413,7 @@
 
             // Exponer funciones útiles al ámbito global para debugging o extensibilidad
             window.__siacasa_widget = {
-                addMessage,
+                addMessageToChat,
                 showTypingIndicator,
                 hideTypingIndicator,
                 sendMessage,
