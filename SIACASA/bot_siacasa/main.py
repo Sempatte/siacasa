@@ -4,6 +4,10 @@ import os
 import logging
 from dotenv import load_dotenv
 
+# Aplicar monkey_patch de eventlet ANTES de cualquier otra importación
+import eventlet
+eventlet.monkey_patch()
+
 # Configurar logging
 logging.basicConfig(
     level=logging.INFO,
@@ -28,6 +32,9 @@ from bot_siacasa.application.use_cases.procesar_mensaje_use_case import Procesar
 from bot_siacasa.domain.banks_config import BANK_CONFIGS
 from bot_siacasa.interfaces.web.web_app import WebApp
 from bot_siacasa.domain.entities.analisis_sentimiento import AnalisisSentimiento
+from bot_siacasa.infrastructure.db.support_repository import SupportRepository
+from bot_siacasa.infrastructure.websocket.socketio_server import init_socketio_server
+from bot_siacasa.infrastructure.db.neondb_connector import NeonDBConnector  
 
 def main():
     """Función principal para iniciar la aplicación."""
@@ -50,6 +57,18 @@ def main():
         repository = MemoryRepository()
         logger.info("Repositorio en memoria inicializado")
         
+        # Inicializar el conector de base de datos
+        db_connector = NeonDBConnector(
+            host=os.getenv("NEONDB_HOST"),
+            database=os.getenv("NEONDB_DATABASE"),
+            user=os.getenv("NEONDB_USER"),
+            password=os.getenv("NEONDB_PASSWORD")
+        )
+        
+        # Inicializar repositorio de soporte
+        support_repository = SupportRepository(db_connector)
+        logger.info("Repositorio de soporte inicializado")
+        
         # Crear el proveedor de IA de OpenAI
         ai_provider = OpenAIProvider(
             api_key=openai_api_key,
@@ -66,7 +85,8 @@ def main():
             repository=repository,
             sentimiento_analyzer=sentimiento_analyzer,
             ai_provider=ai_provider,  # IMPORTANTE: pasar el proveedor de IA
-            bank_config=bank_config
+            bank_config=bank_config,
+            support_repository=support_repository  # Añadir repositorio de soporte
         )
         logger.info("Servicio de chatbot inicializado")
         
@@ -78,16 +98,22 @@ def main():
         logger.info("Caso de uso para procesar mensajes inicializado")
         
         # Crear la aplicación web
-        app = WebApp(procesar_mensaje_use_case=procesar_mensaje_use_case)
+        app = WebApp(procesar_mensaje_use_case=procesar_mensaje_use_case, chatbot_service=chatbot_service)
         logger.info("Aplicación web inicializada")
         
-        # Ejecutar la aplicación
+        # Inicializar el servidor WebSocket/Socket.IO
+        socketio_server = init_socketio_server(app.app, support_repository)
+        logger.info(f"Servidor Socket.IO inicializado")
+        
+        # Asegurar que el servidor escucha en todas las interfaces
         host = os.getenv("HOST", "0.0.0.0")
         port = int(os.getenv("PORT", "3200"))
         debug = os.getenv("DEBUG", "False").lower() == "true"
         
         logger.info(f"Iniciando servidor en {host}:{port} (debug={debug})")
-        app.run(host=host, port=port, debug=debug)
+        
+        # Usar gevent para la ejecución con Socket.IO
+        socketio_server.run(app.app, host=host, port=port, debug=debug)
         
     except Exception as e:
         logger.error(f"Error al iniciar la aplicación: {e}", exc_info=True)

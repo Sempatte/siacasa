@@ -1,0 +1,183 @@
+{% extends 'base.html' %}
+
+{% block title %}Detalles de Archivo - Panel de Administración SIACASA{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Inicio</a></li>
+<li class="breadcrumb-item"><a href="{{ url_for('training.index') }}">Entrenamiento</a></li>
+<li class="breadcrumb-item active" aria-current="page">Detalles de Archivo</li>
+{% endblock %}
+
+{% block page_title %}Detalles de Archivo{% endblock %}
+
+{% block page_actions %}
+<a href="{{ url_for('training.index') }}" class="btn btn-outline-primary">
+    <i class="fas fa-arrow-left me-2"></i> Volver
+</a>
+<a href="{{ url_for('training.download_file', file_id=file.id) }}" class="btn btn-primary">
+    <i class="fas fa-download me-2"></i> Descargar Archivo
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header py-3">
+                <h5 class="mb-0">Información del Archivo</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <div class="d-flex align-items-center">
+                            {% if file.file_type in ['txt', 'text/plain'] %}
+                            <i class="fas fa-file-alt text-secondary fa-3x me-3"></i>
+                            {% elif file.file_type in ['pdf', 'application/pdf'] %}
+                            <i class="fas fa-file-pdf text-danger fa-3x me-3"></i>
+                            {% elif file.file_type in ['doc', 'docx', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'] %}
+                            <i class="fas fa-file-word text-primary fa-3x me-3"></i>
+                            {% elif file.file_type in ['xls', 'xlsx', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'] %}
+                            <i class="fas fa-file-excel text-success fa-3x me-3"></i>
+                            {% elif file.file_type in ['csv', 'text/csv'] %}
+                            <i class="fas fa-file-csv text-success fa-3x me-3"></i>
+                            {% elif file.file_type in ['json', 'application/json'] %}
+                            <i class="fas fa-file-code text-warning fa-3x me-3"></i>
+                            {% elif file.file_type in ['md', 'markdown', 'text/markdown'] %}
+                            <i class="fab fa-markdown text-info fa-3x me-3"></i>
+                            {% elif file.file_type in ['html', 'htm', 'text/html'] %}
+                            <i class="fas fa-file-code text-danger fa-3x me-3"></i>
+                            {% else %}
+                            <i class="fas fa-file text-secondary fa-3x me-3"></i>
+                            {% endif %}
+                            
+                            <div>
+                                <h3 class="mb-0">{{ file.original_filename }}</h3>
+                                <p class="text-muted mb-0">{{ file.file_type }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <span class="text-muted">Tamaño:</span>
+                            <p>{{ (file.file_size / 1024)|round(1) }} KB</p>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <span class="text-muted">Estado:</span>
+                            <p>
+                                {% if file.status == 'pending' %}
+                                <span class="badge status-pending">Pendiente</span>
+                                {% elif file.status == 'processing' %}
+                                <span class="badge status-processing">Procesando</span>
+                                {% elif file.status == 'completed' %}
+                                <span class="badge status-completed">Completado</span>
+                                {% elif file.status == 'error' %}
+                                <span class="badge status-error">Error</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Desconocido</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <span class="text-muted">Fecha de Subida:</span>
+                            <p>{{ file.uploaded_at.strftime('%d/%m/%Y %H:%M:%S') }}</p>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <span class="text-muted">Fecha de Procesamiento:</span>
+                            <p>
+                                {% if file.processed_at %}
+                                {{ file.processed_at.strftime('%d/%m/%Y %H:%M:%S') }}
+                                {% else %}
+                                <span class="text-muted">No procesado</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                {% if file.description %}
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="mb-3">
+                            <span class="text-muted">Descripción:</span>
+                            <p>{{ file.description }}</p>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card shadow-sm">
+            <div class="card-header py-3">
+                <h5 class="mb-0">Acciones</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('training.download_file', file_id=file.id) }}" class="btn btn-primary">
+                        <i class="fas fa-download me-2"></i> Descargar Archivo
+                    </a>
+                    
+                    {% if file.status == 'completed' %}
+                    <form action="{{ url_for('training.start_training') }}" method="POST">
+                        <input type="hidden" name="file_ids[]" value="{{ file.id }}">
+                        <button type="submit" class="btn btn-success d-block w-100">
+                            <i class="fas fa-robot me-2"></i> Entrenar con Este Archivo
+                        </button>
+                    </form>
+                    {% endif %}
+
+                    <!-- Añadir en la sección de Acciones -->
+                    {% if file.status == 'pending' %}
+                    <form action="{{ url_for('training.process_file', file_id=file.id) }}" method="POST">
+                        <button type="submit" class="btn btn-info d-block w-100 mb-2">
+                            <i class="fas fa-cogs me-2"></i> Procesar Archivo
+                        </button>
+                    </form>
+                    {% endif %}
+                    
+                    <form action="{{ url_for('training.delete_file', file_id=file.id) }}" method="POST" onsubmit="return confirm('¿Estás seguro de que quieres eliminar este archivo?');">
+                        <button type="submit" class="btn btn-outline-danger d-block w-100">
+                            <i class="fas fa-trash-alt me-2"></i> Eliminar Archivo
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if file.status == 'completed' %}
+<div class="card shadow-sm mt-4">
+    <div class="card-header py-3">
+        <h5 class="mb-0">Prueba de embeddings</h5>
+    </div>
+    <div class="card-body">
+        <form action="{{ url_for('training.test_embedding') }}" method="POST">
+            <input type="hidden" name="file_ids[]" value="{{ file.id }}">
+            <div class="mb-3">
+                <label for="query" class="form-label">Escribe una pregunta para probar el conocimiento de este archivo</label>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="query" name="query" placeholder="Ej: ¿Cuáles son los requisitos para abrir una cuenta de ahorros?">
+                    <button class="btn btn-primary" type="submit">
+                        <i class="fas fa-search me-2"></i> Buscar
+                    </button>
+                </div>
+                <div class="form-text">Esto buscará en este archivo para encontrar la información relevante para tu consulta.</div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -48,10 +48,33 @@ class ProcesarMensajeUseCase:
             # Actualizar información del usuario si se proporciona
             if info_usuario:
                 self.chatbot_service.actualizar_datos_usuario(usuario_id, info_usuario)
+                
+            # NUEVO: Verificar si la conversación está escalada a un humano
+            if hasattr(self.chatbot_service, 'esta_escalada') and self.chatbot_service.esta_escalada(usuario_id):
+                # La conversación ya está escalada, guardar el mensaje del usuario
+                self.chatbot_service.agregar_mensaje_usuario(usuario_id, mensaje_usuario)
+                
+                return "Tu mensaje ha sido recibido. Un agente humano te responderá en breve. Por favor, ten paciencia."
+            
+            # NUEVO: Verificar si debe escalar a un humano
+            escalation_result = False  # Initialize the variable here
+            if hasattr(self.chatbot_service, 'check_for_escalation'):
+                try:
+                    escalation_result = self.chatbot_service.check_for_escalation(mensaje_usuario, usuario_id)
+                    logger.info(f"Escalation check result: {escalation_result}")
+                except Exception as e:
+                    logger.error(f"Error al verificar escalación: {e}", exc_info=True)
+                    escalation_result = False  # Ensure it's false in case of error
+
+                
+            if escalation_result:
+                # La conversación ha sido escalada ahora
+                return "Tu consulta ha sido escalada a un agente humano. Un agente te atenderá lo antes posible. Mientras tanto, puedes seguir escribiendo y tu mensaje será visible para el agente cuando se conecte."
             
             # CAMBIO 2: Obtener la conversación ANTES de agregar mensajes
             # para verificar si existe y tiene historial
             conversacion = self.chatbot_service.obtener_o_crear_conversacion(usuario_id)
+            
             mensaje_count_before = len(conversacion.mensajes) if conversacion else 0
             logger.info(f"Conversación encontrada con {mensaje_count_before} mensajes")
             
@@ -87,6 +110,9 @@ class ProcesarMensajeUseCase:
             en esa información previa.
             4. Adapta tu tono al estado emocional del cliente.
             5. Usa un lenguaje natural y conversacional.
+            6. Si el usuario pide hablar con un humano o un agente, o muestra frustración con tus respuestas,
+            sugiere que puedes escalarlo a un agente humano. Por ejemplo: "Si prefieres, puedo transferir
+            esta conversación a un agente humano que podrá ayudarte con tu consulta."
             """
             
             # CAMBIO 6: Si es el primer mensaje del usuario, modificar instrucciones

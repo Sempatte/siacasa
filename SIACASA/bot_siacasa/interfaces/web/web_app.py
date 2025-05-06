@@ -1,5 +1,5 @@
 # bot_siacasa/interfaces/web/web_app.py
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import uuid
 import logging
@@ -9,6 +9,8 @@ from flask_cors import CORS  # Necesitarás instalar flask-cors
 
 from bot_siacasa.domain.banks_config import BANK_CONFIGS
 from bot_siacasa.application.use_cases.procesar_mensaje_use_case import ProcesarMensajeUseCase
+from bot_siacasa.infrastructure.websocket.socketio_server import get_websocket_server as get_socketio_server
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -18,14 +20,16 @@ class WebApp:
     Aplicación web Flask para interactuar con el chatbot.
     """
     
-    def __init__(self, procesar_mensaje_use_case: ProcesarMensajeUseCase):
+    def __init__(self, procesar_mensaje_use_case: ProcesarMensajeUseCase, chatbot_service):
         """
         Inicializa la aplicación web.
         
         Args:
             procesar_mensaje_use_case: Caso de uso para procesar mensajes
+            chatbot_service: Servicio de chatbot para gestionar conversaciones
         """
         self.procesar_mensaje_use_case = procesar_mensaje_use_case
+        self.chatbot_service = chatbot_service
         
         # Crear aplicación Flask
         self.app = Flask(
@@ -71,6 +75,66 @@ class WebApp:
             
             return render_template('index.html')
         
+        # NUEVO: Añadir método para finalizar una sesión
+        @self.app.route('/api/finalizar-sesion', methods=['POST'])
+        def finalizar_sesion():
+            """
+            Finaliza una sesión de chat.
+            """
+            try:
+                # Intenta obtener datos JSON, pero maneja el caso donde no hay datos JSON
+                try:
+                    datos = request.json
+                    usuario_id = datos.get('usuario_id') if datos else None
+                except:
+                    # Si hay un error al obtener JSON, intenta obtener datos de formulario
+                    usuario_id = request.form.get('usuario_id')
+                    
+                    # Si tampoco hay datos de formulario, intenta obtener datos del cuerpo bruto
+                    if not usuario_id and request.data:
+                        try:
+                            import json
+                            raw_data = json.loads(request.data.decode('utf-8'))
+                            usuario_id = raw_data.get('usuario_id')
+                        except:
+                            pass
+                
+                # Verificación final: si no hay usuario_id, devolver error
+                if not usuario_id:
+                    logger.warning("Solicitud de finalización de sesión sin ID de usuario")
+                    return jsonify({
+                        'status': 'error',
+                        'mensaje': 'Se requiere ID de usuario'
+                    }), 400
+                
+                logger.info(f"Finalizando sesión para usuario: {usuario_id}")
+                
+                # Finalizar la sesión activa del usuario
+                query = """
+                UPDATE chatbot_sessions 
+                SET end_time = %s
+                WHERE user_id = %s AND end_time IS NULL
+                """
+                
+                from bot_siacasa.infrastructure.db.neondb_connector import NeonDBConnector
+                db = NeonDBConnector()
+                
+                db.execute(query, (datetime.now(), usuario_id))
+                logger.info(f"Conversación finalizada para usuario {usuario_id}")
+                
+                return jsonify({
+                    'status': 'success',
+                    'mensaje': 'Sesión finalizada correctamente'
+                })
+                
+            except Exception as e:
+                logger.error(f"Error al finalizar sesión: {e}", exc_info=True)
+                return jsonify({
+                    'status': 'error',
+                    'mensaje': 'Error al finalizar sesión',
+                    'error': str(e)
+                }), 500
+        
         # API para procesar mensajes
         @self.app.route('/api/mensaje', methods=['POST'])
         def procesar_mensaje():
@@ -99,6 +163,24 @@ class WebApp:
                 session['usuario_id'] = usuario_id
                 logger.info(f"Usando ID de usuario: {usuario_id}")
                 
+                # Determinar el código del banco desde la solicitud o usar valor predeterminado
+                bank_code = datos.get('bank_code', 'default')
+                
+                # Obtener o crear la conversación
+                conversacion = self.chatbot_service.obtener_o_crear_conversacion(usuario_id)
+
+                # NUEVO: Asegurarse de que la conversación tenga el bank_code en sus metadatos
+                if hasattr(conversacion, 'metadata'):
+                    conversacion.metadata['bank_code'] = bank_code
+                elif hasattr(conversacion, 'metadata') and conversacion.metadata is None:
+                    conversacion.metadata = {'bank_code': bank_code}
+
+                # Guardar la conversación con los metadatos actualizados
+                self.chatbot_service.repository.guardar_conversacion(conversacion)
+                
+                # NUEVO: Verificar si hay una sesión activa para este usuario o crear una nueva
+                session_id = self._get_or_create_chat_session(usuario_id, bank_code)
+                
                 # Procesar mensaje con el chatbot
                 respuesta = self.procesar_mensaje_use_case.execute(
                     mensaje_usuario=mensaje,
@@ -106,11 +188,15 @@ class WebApp:
                     info_usuario=info_usuario
                 )
                 
+                # NUEVO: Actualizar contador de mensajes en la sesión
+                self._update_chat_session_message_count(session_id)
+                
                 # Devolver respuesta como JSON, incluyendo el ID de usuario
                 return jsonify({
                     'respuesta': respuesta,
                     'status': 'success',
-                    'usuario_id': usuario_id  # Devolver el ID para que el cliente lo use
+                    'usuario_id': usuario_id,  # Devolver el ID para que el cliente lo use
+                    'session_id': session_id   # Añadir el ID de sesión para referencia
                 })
             except Exception as e:
                 logger.error(f"Error al procesar mensaje: {e}", exc_info=True)
@@ -119,6 +205,7 @@ class WebApp:
                     'error': str(e),
                     'status': 'error'
                 }), 500
+
         
         # Ruta para reiniciar la conversación
         @self.app.route('/api/reiniciar', methods=['POST'])
@@ -153,6 +240,125 @@ class WebApp:
             ))
             response.headers['Content-Type'] = 'application/javascript'
             return response
+        
+        @self.app.route('/api/mensajes', methods=['GET'])
+        def obtener_mensajes():
+            """Endpoint para recuperar mensajes nuevos para un usuario específico."""
+            try:
+                usuario_id = request.args.get('usuario_id')
+                ticket_id = request.args.get('ticket_id')
+                ultimo_mensaje = int(request.args.get('ultimo_mensaje') or 0)
+                
+                if not usuario_id:
+                    return jsonify({
+                        'status': 'error',
+                        'error': 'Se requiere usuario_id',
+                        'mensajes': []
+                    }), 400
+                
+                # Obtener mensajes nuevos
+                from datetime import datetime
+                timestamp_ultimo = datetime.fromtimestamp(ultimo_mensaje / 1000) if ultimo_mensaje > 0 else None
+                
+                # Si tenemos un ticket_id, obtener mensajes de ese ticket
+                if ticket_id:
+                    from bot_siacasa.domain.services.escalation_service import get_escalation_service
+                    escalation_service = get_escalation_service()
+                    messages = escalation_service.get_ticket_messages(ticket_id, timestamp_ultimo)
+                else:
+                    # Si no, obtener los mensajes de la conversación del usuario
+                    messages = []
+                    
+                return jsonify({
+                    'status': 'success',
+                    'mensajes': messages
+                })
+            except Exception as e:
+                logger.error(f"Error al obtener mensajes: {e}", exc_info=True)
+                return jsonify({
+                    'status': 'error',
+                    'error': str(e),
+                    'mensajes': []
+                }), 500
+        
+        
+    # NUEVO: Añadir métodos de gestión de sesiones
+    def _get_or_create_chat_session(self, usuario_id, bank_code):
+        """
+        Obtiene una sesión de chat activa o crea una nueva.
+        
+        Args:
+            usuario_id: ID del usuario
+            bank_code: Código del banco
+            
+        Returns:
+            ID de la sesión
+        """
+        try:
+            # Conectar a la base de datos
+            from bot_siacasa.infrastructure.db.neondb_connector import NeonDBConnector
+            db = NeonDBConnector()
+            
+            # Verificar si hay una sesión activa para este usuario (sin end_time)
+            query = """
+            SELECT id FROM chatbot_sessions 
+            WHERE user_id = %s AND bank_code = %s AND end_time IS NULL 
+            ORDER BY start_time DESC LIMIT 1
+            """
+            
+            result = db.fetch_one(query, (usuario_id, bank_code))
+            
+            if result:
+                logger.info(f"Sesión activa encontrada: {result['id']} para usuario {usuario_id}")
+                return result['id']
+            
+            # Si no hay sesión activa, crear una nueva
+            session_id = str(uuid.uuid4())
+            
+            query = """
+            INSERT INTO chatbot_sessions (id, user_id, bank_code, start_time, message_count, metadata)
+            VALUES (%s, %s, %s, %s, 0, %s)
+            """
+            
+            # Usar el bank_code pasado como parámetro en lugar de obtenerlo de la solicitud
+            # datos = request.json
+            # bank_code = datos.get('bank_code', 'default')  <-- Esta línea debe ser eliminada
+            
+            # Metadatos como JSON
+            metadata_json = json.dumps({"source": "web"})
+            db.execute(query, (session_id, usuario_id, bank_code, datetime.now(), metadata_json))
+            logger.info(f"Nueva conversación iniciada: {session_id} para usuario {usuario_id} del banco {bank_code}")
+            
+            return session_id
+            
+        except Exception as e:
+            logger.error(f"Error al obtener/crear sesión de chat: {e}", exc_info=True)
+            # En caso de error, generar un ID de sesión temporal
+            return str(uuid.uuid4())
+        
+    def _update_chat_session_message_count(self, session_id):
+        """
+        Actualiza el contador de mensajes en una sesión.
+        
+        Args:
+            session_id: ID de la sesión
+        """
+        try:
+            query = """
+            UPDATE chatbot_sessions 
+            SET message_count = message_count + 1
+            WHERE id = %s
+            """
+            
+            from bot_siacasa.infrastructure.db.neondb_connector import NeonDBConnector
+            db = NeonDBConnector()
+            
+            db.execute(query, (session_id,))
+            
+        except Exception as e:
+            logger.error(f"Error al actualizar contador de mensajes: {e}", exc_info=True)
+
+    
     
     def run(self, host: str = '0.0.0.0', port: int = 4040, debug: bool = False, **kwargs) -> None:
         """
@@ -164,5 +370,13 @@ class WebApp:
             debug: Modo debug
             **kwargs: Argumentos adicionales para Flask
         """
-        self.app.run(host=host, port=port, debug=debug, **kwargs)
+        # Obtener instancia de SocketIO
+        socketio_server = get_socketio_server()
+        
+        if socketio_server:
+            # Si hay SocketIO, usarlo para ejecutar la aplicación
+            socketio_server.run(self.app, host=host, port=port, debug=debug, **kwargs)
+        else:
+            # Si no hay SocketIO, ejecutar normalmente
+            self.app.run(host=host, port=port, debug=debug, **kwargs)
 

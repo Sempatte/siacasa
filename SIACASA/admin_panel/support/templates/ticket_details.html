@@ -1,0 +1,319 @@
+{% extends 'base.html' %}
+
+{% block title %}Detalles de Ticket - Panel de Administración SIACASA{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Inicio</a></li>
+<li class="breadcrumb-item"><a href="{{ url_for('support.index') }}">Soporte</a></li>
+<li class="breadcrumb-item active" aria-current="page">Detalles de Ticket</li>
+{% endblock %}
+
+{% block page_title %}Detalles de Ticket #{{ ticket.id[:8] }}{% endblock %}
+
+{% block page_actions %}
+<div class="btn-group">
+    <a href="{{ url_for('support.index') }}" class="btn btn-outline-primary">
+        <i class="fas fa-arrow-left me-2"></i> Volver
+    </a>
+    
+    {% if not ticket.agente_id %}
+    <form action="{{ url_for('support.assign_ticket', ticket_id=ticket.id) }}" method="POST" class="d-inline">
+        <input type="hidden" name="referer" value="details">
+        <button type="submit" class="btn btn-success">
+            <i class="fas fa-user-check me-2"></i> Asignar a mí
+        </button>
+    </form>
+    {% else %}
+    <a href="{{ url_for('support.live_chat', ticket_id=ticket.id) }}" class="btn btn-primary">
+        <i class="fas fa-comments me-2"></i> Chat en vivo
+    </a>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Información del Ticket -->
+    <div class="col-md-6 mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                <h6 class="m-0 font-weight-bold text-primary">Información del Ticket</h6>
+                <span class="badge 
+                    {% if ticket.estado.value == 'pending' %}bg-warning
+                    {% elif ticket.estado.value == 'assigned' %}bg-info
+                    {% elif ticket.estado.value == 'active' %}bg-primary
+                    {% elif ticket.estado.value == 'resolved' %}bg-success
+                    {% elif ticket.estado.value == 'closed' %}bg-secondary
+                    {% else %}bg-secondary{% endif %}">
+                    {{ ticket.estado.value|capitalize }}
+                </span>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless">
+                    <tbody>
+                        <tr>
+                            <th width="40%">ID del Ticket:</th>
+                            <td><code>{{ ticket.id }}</code></td>
+                        </tr>
+                        <tr>
+                            <th>Fecha de Creación:</th>
+                            <td>{{ ticket.fecha_creacion.strftime('%d/%m/%Y %H:%M:%S') }}</td>
+                        </tr>
+                        <tr>
+                            <th>Razón de Escalación:</th>
+                            <td>
+                                {% if ticket.razon_escalacion.value == 'user_requested' %}
+                                <span class="badge bg-info">Solicitado por Usuario</span>
+                                {% elif ticket.razon_escalacion.value == 'multiple_failures' %}
+                                <span class="badge bg-warning">Múltiples Fallos</span>
+                                {% elif ticket.razon_escalacion.value == 'complex_query' %}
+                                <span class="badge bg-primary">Consulta Compleja</span>
+                                {% elif ticket.razon_escalacion.value == 'agent_decision' %}
+                                <span class="badge bg-secondary">Decisión de Agente</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ ticket.razon_escalacion.value }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Prioridad:</th>
+                            <td>
+                                {% if ticket.prioridad == 5 %}
+                                <span class="badge bg-danger">Urgente (5)</span>
+                                {% elif ticket.prioridad == 4 %}
+                                <span class="badge bg-warning">Alta (4)</span>
+                                {% elif ticket.prioridad == 3 %}
+                                <span class="badge bg-primary">Media (3)</span>
+                                {% elif ticket.prioridad == 2 %}
+                                <span class="badge bg-info">Baja (2)</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Normal (1)</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Agente Asignado:</th>
+                            <td>
+                                {% if ticket.agente_id %}
+                                <span class="text-success">{{ ticket.agente_nombre }}</span>
+                                <small class="text-muted d-block">
+                                    Asignado: {{ ticket.fecha_asignacion.strftime('%d/%m/%Y %H:%M') }}
+                                </small>
+                                {% else %}
+                                <span class="text-muted">Sin asignar</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% if ticket.fecha_resolucion %}
+                        <tr>
+                            <th>Resuelto:</th>
+                            <td>
+                                {{ ticket.fecha_resolucion.strftime('%d/%m/%Y %H:%M') }}
+                            </td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+
+                <!-- Botones de acción basados en el estado -->
+                <div class="mt-4">
+                    {% if ticket.agente_id and ticket.agente_id == session.get('user_id') %}
+                        {% if ticket.estado.value == 'assigned' or ticket.estado.value == 'active' %}
+                        <form action="{{ url_for('support.resolve_ticket', ticket_id=ticket.id) }}" method="POST" class="mb-3">
+                            <div class="form-group mb-3">
+                                <label for="resolution_notes">Notas de resolución:</label>
+                                <textarea id="resolution_notes" name="resolution_notes" class="form-control" rows="3" placeholder="Escriba las notas sobre la resolución..."></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-check-circle me-2"></i> Marcar como Resuelto
+                            </button>
+                        </form>
+                        
+                        <form action="{{ url_for('support.unassign_ticket', ticket_id=ticket.id) }}" method="POST" class="d-inline">
+                            <button type="submit" class="btn btn-outline-secondary">
+                                <i class="fas fa-user-minus me-2"></i> Desasignar
+                            </button>
+                        </form>
+                        {% endif %}
+                    {% endif %}
+                    
+                    {% if ticket.estado.value == 'resolved' %}
+                    <form action="{{ url_for('support.close_ticket', ticket_id=ticket.id) }}" method="POST" class="d-inline">
+                        <button type="submit" class="btn btn-secondary">
+                            <i class="fas fa-times-circle me-2"></i> Cerrar Ticket
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Información del Usuario -->
+    <div class="col-md-6 mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Información del Usuario</h6>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless">
+                    <tbody>
+                        <tr>
+                            <th width="40%">ID de Usuario:</th>
+                            <td><code>{{ ticket.usuario.id }}</code></td>
+                        </tr>
+                        <tr>
+                            <th>Nombre:</th>
+                            <td>{{ ticket.usuario.nombre or 'No especificado' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Datos Adicionales:</th>
+                            <td>
+                                {% if ticket.usuario.datos %}
+                                <ul class="list-unstyled mb-0">
+                                    {% for key, value in ticket.usuario.datos.items() %}
+                                    <li><strong>{{ key }}:</strong> {{ value }}</li>
+                                    {% endfor %}
+                                </ul>
+                                {% else %}
+                                <span class="text-muted">No hay datos adicionales</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Notas del Ticket -->
+        <div class="card shadow-sm mt-4">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Notas del Ticket</h6>
+            </div>
+            <div class="card-body">
+                {% if ticket.notas %}
+                <div class="card p-3 bg-light">
+                    {{ ticket.notas|nl2br }}
+                </div>
+                {% else %}
+                <p class="text-muted">No hay notas para este ticket.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Conversación -->
+<div class="row">
+    <div class="col-md-12">
+        <div class="card shadow-sm">
+            <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                <h6 class="m-0 font-weight-bold text-primary">Historial de Conversación</h6>
+                <a href="{{ url_for('support.live_chat', ticket_id=ticket.id) }}" class="btn btn-sm btn-primary">
+                    <i class="fas fa-comments me-1"></i> Ver Chat Completo
+                </a>
+            </div>
+            <div class="card-body">
+                <div class="conversation-container p-3" style="max-height: 500px; overflow-y: auto;">
+                    {% if messages %}
+                        {% for message in messages %}
+                            <div class="message-block {% if message.sender_type == 'user' %}message-user{% else %}message-agent{% endif %} mb-4">
+                                <div class="d-flex align-items-start">
+                                    {% if message.sender_type == 'user' %}
+                                    <div class="message-avatar bg-light text-dark">
+                                        <i class="fas fa-user"></i>
+                                    </div>
+                                    {% else %}
+                                    <div class="message-avatar bg-primary text-white">
+                                        <i class="fas fa-headset"></i>
+                                    </div>
+                                    {% endif %}
+                                    
+                                    <div class="message-content ms-3 flex-grow-1">
+                                        <div class="message-header d-flex justify-content-between align-items-center mb-1">
+                                            <div class="message-sender fw-bold">
+                                                {% if message.sender_type == 'user' %}
+                                                    Usuario
+                                                {% else %}
+                                                    {{ message.sender_name or 'Agente' }}
+                                                    {% if message.is_internal %}
+                                                    <span class="badge bg-warning ms-2">Interno</span>
+                                                    {% endif %}
+                                                {% endif %}
+                                            </div>
+                                            <div class="message-time small text-muted">
+                                                {{ message.timestamp.strftime('%d/%m/%Y %H:%M') if message.timestamp else '' }}
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="message-body p-3 rounded 
+                                            {% if message.sender_type == 'user' %}
+                                            bg-light text-dark
+                                            {% elif message.is_internal %}
+                                            bg-warning-light text-dark
+                                            {% else %}
+                                            bg-primary-light text-dark
+                                            {% endif %}
+                                        ">
+                                            {{ message.content|nl2br }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center py-5">
+                            <div class="mb-3">
+                                <i class="fas fa-comments fa-3x text-muted"></i>
+                            </div>
+                            <h5 class="text-muted">No hay mensajes disponibles</h5>
+                            <p class="text-muted">
+                                La conversación aún no contiene mensajes o no se pudieron cargar.
+                                <a href="{{ url_for('support.live_chat', ticket_id=ticket.id) }}">Iniciar chat</a>
+                            </p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .message-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+    
+    .message-body {
+        white-space: pre-line;
+    }
+    
+    .bg-primary-light {
+        background-color: rgba(0, 123, 255, 0.1);
+    }
+    
+    .bg-warning-light {
+        background-color: rgba(255, 193, 7, 0.2);
+    }
+</style>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Scroll to bottom of conversation
+        const conversationContainer = document.querySelector('.conversation-container');
+        if (conversationContainer) {
+            conversationContainer.scrollTop = conversationContainer.scrollHeight;
+        }
+    });
+</script>
+{% endblock %}

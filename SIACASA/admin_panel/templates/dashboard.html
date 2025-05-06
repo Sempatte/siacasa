@@ -1,0 +1,283 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - Panel de Administración SIACASA{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Inicio</a></li>
+<li class="breadcrumb-item active" aria-current="page">Dashboard</li>
+{% endblock %}
+
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <!-- Tarjeta 1: Conversaciones Totales -->
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="dashboard-card p-4">
+            <div class="d-flex align-items-center">
+                <div class="card-icon bg-primary-light text-primary">
+                    <i class="fas fa-comments"></i>
+                </div>
+                <div>
+                    <div class="card-value">{{ stats.total_conversations }}</div>
+                    <div class="card-title">Conversaciones Totales</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tarjeta 2: Usuarios Activos -->
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="dashboard-card p-4">
+            <div class="d-flex align-items-center">
+                <div class="card-icon bg-success-light text-success">
+                    <i class="fas fa-users"></i>
+                </div>
+                <div>
+                    <div class="card-value">{{ stats.active_users }}</div>
+                    <div class="card-title">Usuarios Activos (24h)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tarjeta 3: Archivos de Entrenamiento -->
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="dashboard-card p-4">
+            <div class="d-flex align-items-center">
+                <div class="card-icon bg-info-light text-info">
+                    <i class="fas fa-file-alt"></i>
+                </div>
+                <div>
+                    <div class="card-value">{{ stats.total_training_files }}</div>
+                    <div class="card-title">Archivos de Entrenamiento</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tarjeta 4: Último Entrenamiento -->
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="dashboard-card p-4">
+            <div class="d-flex align-items-center">
+                <div class="card-icon bg-warning-light text-warning">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <div>
+                    <div class="card-value">
+                        {% if stats.last_training %}
+                            {{ stats.last_training.strftime('%d/%m/%Y') }}
+                        {% else %}
+                            --/--/----
+                        {% endif %}
+                    </div>
+                    <div class="card-title">Último Entrenamiento</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Sección Izquierda -->
+    <div class="col-lg-8">
+        <!-- Acciones Rápidas -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                <h6 class="m-0 font-weight-bold text-primary">Acciones Rápidas</h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <a href="{{ url_for('training.index') }}" class="card p-4 text-center shadow-sm h-100 text-decoration-none">
+                            <div class="mb-3">
+                                <i class="fas fa-robot fa-3x text-primary"></i>
+                            </div>
+                            <h5>Entrenar Chatbot</h5>
+                            <p class="text-muted small">Mejora las respuestas con nuevos datos</p>
+                        </a>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <a href="#" class="card p-4 text-center shadow-sm h-100 text-decoration-none">
+                            <div class="mb-3">
+                                <i class="fas fa-chart-line fa-3x text-success"></i>
+                            </div>
+                            <h5>Ver Estadísticas</h5>
+                            <p class="text-muted small">Analiza el rendimiento del chatbot</p>
+                        </a>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <a href="#" class="card p-4 text-center shadow-sm h-100 text-decoration-none">
+                            <div class="mb-3">
+                                <i class="fas fa-cog fa-3x text-info"></i>
+                            </div>
+                            <h5>Configuración</h5>
+                            <p class="text-muted small">Personaliza el comportamiento del chatbot</p>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Últimas Conversaciones -->
+        <div class="card shadow-sm">
+            <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                <h6 class="m-0 font-weight-bold text-primary">Últimas Conversaciones</h6>
+                <a href="#" class="btn btn-sm btn-primary">Ver Todas</a>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID Usuario</th>
+                                <th>Fecha</th>
+                                <th>Mensajes</th>
+                                <th>Satisfacción</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Ejemplo de datos, deberás reemplazarlos con datos reales -->
+                            <tr>
+                                <td>2a49bf...</td>
+                                <td>01/05/2025 14:32</td>
+                                <td>8</td>
+                                <td><span class="badge bg-success">Alta</span></td>
+                                <td><a href="#" class="btn btn-sm btn-outline-primary">Ver</a></td>
+                            </tr>
+                            <tr>
+                                <td>7b38cf...</td>
+                                <td>01/05/2025 12:15</td>
+                                <td>4</td>
+                                <td><span class="badge bg-warning">Media</span></td>
+                                <td><a href="#" class="btn btn-sm btn-outline-primary">Ver</a></td>
+                            </tr>
+                            <tr>
+                                <td>4e59ad...</td>
+                                <td>01/05/2025 10:48</td>
+                                <td>12</td>
+                                <td><span class="badge bg-danger">Baja</span></td>
+                                <td><a href="#" class="btn btn-sm btn-outline-primary">Ver</a></td>
+                            </tr>
+                            <tr>
+                                <td>9c27df...</td>
+                                <td>30/04/2025 18:22</td>
+                                <td>6</td>
+                                <td><span class="badge bg-success">Alta</span></td>
+                                <td><a href="#" class="btn btn-sm btn-outline-primary">Ver</a></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Sección Derecha -->
+    <div class="col-lg-4">
+        <!-- Estado del Sistema -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Estado del Sistema</h6>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>Chatbot</span>
+                        <span class="badge bg-success">Activo</span>
+                    </div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-success" role="progressbar" style="width: 100%"></div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>Base de Conocimientos</span>
+                        <span class="badge bg-success">Actualizada</span>
+                    </div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-success" role="progressbar" style="width: 90%"></div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>Uso de API</span>
+                        <span class="badge bg-info">65%</span>
+                    </div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-info" role="progressbar" style="width: 65%"></div>
+                    </div>
+                </div>
+                <div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>Almacenamiento</span>
+                        <span class="badge bg-warning">72%</span>
+                    </div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-warning" role="progressbar" style="width: 72%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Próximos Pasos -->
+        <div class="card shadow-sm">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Próximos Pasos</h6>
+            </div>
+            <div class="card-body">
+                <div class="d-flex align-items-start mb-3">
+                    <div class="fa-stack fa-1x me-3 mt-1">
+                        <i class="fas fa-circle fa-stack-2x text-primary-light"></i>
+                        <i class="fas fa-upload fa-stack-1x text-primary"></i>
+                    </div>
+                    <div>
+                        <h6 class="mb-1 fw-bold">Subir documentos de entrenamiento</h6>
+                        <p class="text-muted small">Mejora la base de conocimientos con documentos específicos de tu banco.</p>
+                    </div>
+                </div>
+                <div class="d-flex align-items-start mb-3">
+                    <div class="fa-stack fa-1x me-3 mt-1">
+                        <i class="fas fa-circle fa-stack-2x text-primary-light"></i>
+                        <i class="fas fa-cogs fa-stack-1x text-primary"></i>
+                    </div>
+                    <div>
+                        <h6 class="mb-1 fw-bold">Personalizar respuestas</h6>
+                        <p class="text-muted small">Configura el tono y estilo de las respuestas del chatbot.</p>
+                    </div>
+                </div>
+                <div class="d-flex align-items-start">
+                    <div class="fa-stack fa-1x me-3 mt-1">
+                        <i class="fas fa-circle fa-stack-2x text-primary-light"></i>
+                        <i class="fas fa-chart-pie fa-stack-1x text-primary"></i>
+                    </div>
+                    <div>
+                        <h6 class="mb-1 fw-bold">Analizar conversaciones</h6>
+                        <p class="text-muted small">Revisa las conversaciones para identificar áreas de mejora.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Script para actualizar los datos en tiempo real
+    document.addEventListener('DOMContentLoaded', function() {
+        // Actualizar cada 30 segundos
+        setInterval(function() {
+            fetch('/api/dashboard/stats')
+                .then(response => response.json())
+                .then(data => {
+                    // Actualizar tarjetas
+                    document.querySelector('.card-value:nth-child(1)').textContent = data.total_conversations;
+                    document.querySelector('.card-value:nth-child(2)').textContent = data.active_users;
+                })
+                .catch(error => console.error('Error al actualizar estadísticas:', error));
+        }, 30000);
+    });
+</script>
+{% endblock %}  

@@ -5,6 +5,7 @@ SIACASA/venv/
 .env.*
 !.env.example
 
+SIACASA/.env
 # Entorno virtual
 env/
 ENV/
@@ -31,7 +32,8 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
-
+SIACASA/.env
+**/.env
 # Archivos de log
 logs/
 *.log

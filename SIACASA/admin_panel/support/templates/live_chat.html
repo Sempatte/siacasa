@@ -1,0 +1,813 @@
+{% extends 'base.html' %}
+
+{% block title %}Chat en Vivo - Panel de Administración SIACASA{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Inicio</a></li>
+<li class="breadcrumb-item"><a href="{{ url_for('support.index') }}">Soporte</a></li>
+<li class="breadcrumb-item"><a href="{{ url_for('support.ticket_details', ticket_id=ticket.id) }}">Detalles de Ticket</a></li>
+<li class="breadcrumb-item active" aria-current="page">Chat en Vivo</li>
+{% endblock %}
+
+{% block page_title %}Chat en Vivo - Ticket #{{ ticket.id[:8] }}{% endblock %}
+
+{% block page_actions %}
+<div class="btn-group">
+    <a href="{{ url_for('support.ticket_details', ticket_id=ticket.id) }}" class="btn btn-outline-primary">
+        <i class="fas fa-arrow-left me-2"></i> Volver a Detalles
+    </a>
+    
+    <form action="{{ url_for('support.resolve_ticket', ticket_id=ticket.id) }}" method="POST" class="d-inline">
+        <input type="hidden" name="resolution_notes" value="Chat resuelto desde la interfaz de chat en vivo.">
+        <button type="submit" class="btn btn-success">
+            <i class="fas fa-check-circle me-2"></i> Resolver Ticket
+        </button>
+    </form>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-9">
+        <!-- Panel de Chat -->
+        <div class="card shadow-sm chat-panel" style="height: calc(100vh - 240px);">
+            <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center">
+                    <div class="user-avatar bg-primary text-white me-2">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <div>
+                        <h6 class="m-0 font-weight-bold">{{ ticket.usuario.nombre or 'Usuario ' + ticket.usuario.id[:8] }}</h6>
+                        <small class="text-muted">{{ ticket.fecha_creacion.strftime('%d/%m/%Y %H:%M') }}</small>
+                    </div>
+                </div>
+                <div>
+                    <span class="badge 
+                        {% if ticket.estado.value == 'pending' %}bg-warning
+                        {% elif ticket.estado.value == 'assigned' %}bg-info
+                        {% elif ticket.estado.value == 'active' %}bg-primary
+                        {% elif ticket.estado.value == 'resolved' %}bg-success
+                        {% elif ticket.estado.value == 'closed' %}bg-secondary
+                        {% else %}bg-secondary{% endif %}">
+                        {{ ticket.estado.value|capitalize }}
+                    </span>
+                </div>
+            </div>
+            <div class="card-body p-0 d-flex flex-column">
+                <!-- Historial de Conversación -->
+                <div class="chat-history flex-grow-1 p-3 overflow-auto" id="chatHistory">
+                    <!-- Cargar el historial completo de la conversación -->
+                    {% if conversation_history %}
+                        {% for message in conversation_history %}
+                            <div class="message-block {% if message.role == 'user' %}message-user{% elif message.role == 'system' %}message-system{% else %}message-assistant{% endif %} mb-3">
+                                <div class="d-flex align-items-start">
+                                    {% if message.role == 'user' %}
+                                    <div class="message-avatar bg-light text-dark">
+                                        <i class="fas fa-user"></i>
+                                    </div>
+                                    {% elif message.role == 'system' %}
+                                    <div class="message-avatar bg-secondary text-white">
+                                        <i class="fas fa-cog"></i>
+                                    </div>
+                                    {% else %}
+                                        {% if message.is_from_agent %}
+                                        <div class="message-avatar bg-success text-white">
+                                            <i class="fas fa-headset"></i>
+                                        </div>
+                                        {% else %}
+                                        <div class="message-avatar bg-primary text-white">
+                                            <i class="fas fa-robot"></i>
+                                        </div>
+                                        {% endif %}
+                                    {% endif %}
+                                    
+                                    <div class="message-content ms-3 flex-grow-1">
+                                        <div class="message-header d-flex justify-content-between align-items-center mb-1">
+                                            <div class="message-sender fw-bold">
+                                                {% if message.role == 'user' %}
+                                                    Usuario
+                                                {% elif message.role == 'system' %}
+                                                    Sistema
+                                                {% else %}
+                                                    {% if message.is_from_agent %}
+                                                        {{ message.agent_name }}
+                                                    {% else %}
+                                                        Asistente Virtual
+                                                    {% endif %}
+                                                {% endif %}
+                                            </div>
+                                            <div class="message-time small text-muted">
+                                                {{ message.timestamp.strftime('%H:%M') }}
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="message-body p-3 rounded 
+                                            {% if message.role == 'user' %}
+                                            bg-light text-dark
+                                            {% elif message.role == 'system' %}
+                                            bg-secondary-light text-dark
+                                            {% elif message.is_from_agent %}
+                                            bg-success-light text-dark
+                                            {% else %}
+                                            bg-primary-light text-dark
+                                            {% endif %}
+                                        ">
+                                            {{ message.content|safe }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                    
+                    <!-- Mostrar mensajes adicionales (agentes) -->
+                    {% if messages %}
+                        {% for message in messages %}
+                            {% if message.sender_type == 'agent' and message.is_internal %}
+                            <div class="message-block message-internal mb-3">
+                                <div class="d-flex align-items-start">
+                                    <div class="message-avatar bg-warning text-dark">
+                                        <i class="fas fa-exclamation-triangle"></i>
+                                    </div>
+                                    
+                                    <div class="message-content ms-3 flex-grow-1">
+                                        <div class="message-header d-flex justify-content-between align-items-center mb-1">
+                                            <div class="message-sender fw-bold">
+                                                {{ message.sender_name }} <span class="badge bg-warning ms-2">Nota interna</span>
+                                            </div>
+                                            <div class="message-time small text-muted">
+                                                {{ message.timestamp.strftime('%H:%M') if message.timestamp else '' }}
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="message-body p-3 rounded bg-warning-light text-dark">
+                                            {{ message.content|safe }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+                        {% endfor %}
+                    {% endif %}
+                    
+                    <!-- Indicador de escritura -->
+                    <div class="message-block message-typing mb-3 d-none" id="typingIndicator">
+                        <div class="d-flex align-items-start">
+                            <div class="message-avatar bg-light text-dark">
+                                <i class="fas fa-user"></i>
+                            </div>
+                            
+                            <div class="message-content ms-3">
+                                <div class="message-body p-3 rounded bg-light">
+                                    <div class="typing-dots">
+                                        <span></span>
+                                        <span></span>
+                                        <span></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Formulario de Envío de Mensajes -->
+                <div class="chat-input p-3 border-top">
+                    <form id="messageForm" action="{{ url_for('support.send_message', ticket_id=ticket.id) }}" method="POST" data-ticket-id="{{ ticket.id }}" 
+                    data-agent-id="{{ websocket_info.agent_id }}" 
+                    data-agent-name="{{ websocket_info.agent_name }}">
+                        <div class="d-flex gap-2">
+                            <div class="flex-grow-1 position-relative">
+                                <textarea class="form-control" id="messageInput" name="message" placeholder="Escribe tu mensaje..." rows="2" required></textarea>
+                                <div class="form-check position-absolute bottom-0 start-0 ms-2 mb-2">
+                                    <input class="form-check-input" type="checkbox" id="internalMessage" name="is_internal" value="true">
+                                    <label class="form-check-label small" for="internalMessage">
+                                        Nota interna
+                                    </label>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary align-self-end px-4" style="height: 38px;">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <!-- Panel de Información -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Información del Ticket</h6>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <span class="d-block small text-muted">ID del Ticket</span>
+                    <code class="small">{{ ticket.id }}</code>
+                </div>
+                
+                <div class="mb-3">
+                    <span class="d-block small text-muted">Razón de Escalación</span>
+                    <div>
+                        {% if ticket.razon_escalacion.value == 'user_requested' %}
+                        <span class="badge bg-info">Solicitado por Usuario</span>
+                        {% elif ticket.razon_escalacion.value == 'multiple_failures' %}
+                        <span class="badge bg-warning">Múltiples Fallos</span>
+                        {% elif ticket.razon_escalacion.value == 'complex_query' %}
+                        <span class="badge bg-primary">Consulta Compleja</span>
+                        {% elif ticket.razon_escalacion.value == 'agent_decision' %}
+                        <span class="badge bg-secondary">Decisión de Agente</span>
+                        {% else %}
+                        <span class="badge bg-secondary">{{ ticket.razon_escalacion.value }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <span class="d-block small text-muted">Prioridad</span>
+                    <div>
+                        {% if ticket.prioridad == 5 %}
+                        <span class="badge bg-danger">Urgente (5)</span>
+                        {% elif ticket.prioridad == 4 %}
+                        <span class="badge bg-warning">Alta (4)</span>
+                        {% elif ticket.prioridad == 3 %}
+                        <span class="badge bg-primary">Media (3)</span>
+                        {% elif ticket.prioridad == 2 %}
+                        <span class="badge bg-info">Baja (2)</span>
+                        {% else %}
+                        <span class="badge bg-secondary">Normal (1)</span>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <span class="d-block small text-muted">Creado</span>
+                    <span class="fw-semibold">{{ ticket.fecha_creacion.strftime('%d/%m/%Y %H:%M') }}</span>
+                </div>
+                
+                <div class="mb-3">
+                    <span class="d-block small text-muted">Tiempo Activo</span>
+                    <span class="fw-semibold" id="activeTime">Calculando...</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Panel de Información del Usuario -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Información del Usuario</h6>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <span class="d-block small text-muted">ID de Usuario</span>
+                    <code class="small">{{ ticket.usuario.id }}</code>
+                </div>
+                
+                <div class="mb-3">
+                    <span class="d-block small text-muted">Nombre</span>
+                    <span class="fw-semibold">{{ ticket.usuario.nombre or 'No especificado' }}</span>
+                </div>
+                
+                {% if user_info %}
+                <div class="mb-3">
+                    <span class="d-block small text-muted">Tipo de Usuario</span>
+                    <span class="badge 
+                        {% if user_info.user_type == 'Habitual' %}bg-success
+                        {% elif user_info.user_type == 'Recurrente' %}bg-primary
+                        {% else %}bg-info{% endif %}">
+                        {{ user_info.user_type }}
+                    </span>
+                </div>
+                
+                <div class="mb-3">
+                    <span class="d-block small text-muted">Sesiones Totales</span>
+                    <span class="fw-semibold">{{ user_info.total_sessions }}</span>
+                </div>
+                
+                <div class="mb-3">
+                    <span class="d-block small text-muted">Promedio de Mensajes</span>
+                    <span class="fw-semibold">{{ user_info.avg_messages }}</span>
+                </div>
+                
+                <div class="mb-3">
+                    <span class="d-block small text-muted">Última Actividad</span>
+                    <span class="fw-semibold">
+                        {% if user_info.last_activity %}
+                            {{ user_info.last_activity.strftime('%d/%m/%Y %H:%M') }}
+                        {% else %}
+                            Desconocida
+                        {% endif %}
+                    </span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Panel de Plantillas de Respuesta -->
+        <div class="card shadow-sm">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Respuestas Rápidas</h6>
+            </div>
+            <div class="card-body">
+                <div class="response-templates">
+                    <div class="response-template mb-2">
+                        <a href="#" class="response-template-item" data-template="Hola, gracias por contactarnos. ¿En qué puedo ayudarte?">
+                            Saludo inicial
+                        </a>
+                    </div>
+                    <div class="response-template mb-2">
+                        <a href="#" class="response-template-item" data-template="Entiendo tu situación. Déjame revisar la información para ayudarte mejor.">
+                            Empatía
+                        </a>
+                    </div>
+                    <div class="response-template mb-2">
+                        <a href="#" class="response-template-item" data-template="Necesito consultar más información al respecto. ¿Podrías proporcionarme más detalles?">
+                            Solicitar detalles
+                        </a>
+                    </div>
+                    <div class="response-template mb-2">
+                        <a href="#" class="response-template-item" data-template="Para proceder con esta solicitud, necesitaré verificar tu identidad. ¿Podrías confirmar tu nombre completo y número de cuenta?">
+                            Verificación de identidad
+                        </a>
+                    </div>
+                    <div class="response-template mb-2">
+                        <a href="#" class="response-template-item" data-template="Entiendo tu frustración y lamento los inconvenientes causados. Estamos trabajando para resolver tu problema lo antes posible.">
+                            Disculpa
+                        </a>
+                    </div>
+                    <div class="response-template mb-2">
+                        <a href="#" class="response-template-item" data-template="¿Hay algo más en lo que pueda ayudarte hoy?">
+                            Cierre
+                        </a>
+                    </div>
+                    <div class="response-template mb-2">
+                        <a href="#" class="response-template-item" data-template="Gracias por contactarnos. Ha sido un placer ayudarte. Si tienes más preguntas, no dudes en volver a contactarnos.">
+                            Despedida
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .chat-panel {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .message-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+    
+    .message-body {
+        white-space: pre-line;
+    }
+    
+    .bg-primary-light {
+        background-color: rgba(0, 123, 255, 0.1);
+    }
+    
+    .bg-success-light {
+        background-color: rgba(40, 167, 69, 0.1);
+    }
+    
+    .bg-warning-light {
+        background-color: rgba(255, 193, 7, 0.2);
+    }
+    
+    .bg-secondary-light {
+        background-color: rgba(108, 117, 125, 0.1);
+    }
+    
+    .typing-dots {
+        display: flex;
+        align-items: center;
+    }
+    
+    .typing-dots span {
+        width: 8px;
+        height: 8px;
+        margin: 0 4px;
+        background-color: #6c757d;
+        border-radius: 50%;
+        opacity: 0.4;
+        animation: typing 1.4s infinite both;
+    }
+    
+    .typing-dots span:nth-child(2) {
+        animation-delay: 0.2s;
+    }
+    
+    .typing-dots span:nth-child(3) {
+        animation-delay: 0.4s;
+    }
+    
+    @keyframes typing {
+        0% {
+            opacity: 0.4;
+            transform: translateY(0);
+        }
+        50% {
+            opacity: 1;
+            transform: translateY(-5px);
+        }
+        100% {
+            opacity: 0.4;
+            transform: translateY(0);
+        }
+    }
+    
+    .response-template-item {
+        display: block;
+        padding: 8px 12px;
+        background-color: #f8f9fa;
+        border-radius: 4px;
+        color: #495057;
+        text-decoration: none;
+        transition: all 0.2s ease;
+    }
+    
+    .response-template-item:hover {
+        background-color: #e9ecef;
+        color: #212529;
+    }
+</style>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+<script>
+    /**
+    * Fix for the chat functionality in live_chat.html
+    * 
+    * This script should be added to or replace the existing script in the extra_scripts block
+    * of the template.
+    */
+    document.addEventListener('DOMContentLoaded', function() {
+        // Variables para Socket.IO
+        const socketHost = '{{ websocket_info.host }}';
+        const socketPort = {{ websocket_info.port }};
+        const ticketId = '{{ ticket.id }}';
+        const agentId = '{{ websocket_info.agent_id }}';
+        const agentName = '{{ websocket_info.agent_name }}';
+        
+        let socket = null;
+        let typingTimeout = null;
+        let isTyping = false;
+        let connectionStatus = document.createElement('div');
+        
+        // Crear indicador de estado de conexión
+        connectionStatus.className = 'connection-status alert alert-warning';
+        connectionStatus.style.position = 'fixed';
+        connectionStatus.style.bottom = '10px';
+        connectionStatus.style.right = '10px';
+        connectionStatus.style.zIndex = '1000';
+        connectionStatus.textContent = 'Conectando al servidor...';
+        document.body.appendChild(connectionStatus);
+        
+        // Conectar a Socket.IO
+        connectSocketIO();
+        
+        // Scroll al final de la conversación
+        scrollToBottom();
+        
+        // Actualizar tiempo activo
+        updateActiveTime();
+        
+        // Manejar formulario de mensajes
+        const messageForm = document.getElementById('messageForm');
+        const messageInput = document.getElementById('messageInput');
+        const submitButton = messageForm.querySelector('button[type="submit"]');
+        
+        messageForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const message = messageInput.value.trim();
+            if (!message) return;
+            
+            const isInternal = document.getElementById('internalMessage').checked;
+            
+            // Mostrar indicador de envío
+            const originalText = submitButton.innerHTML;
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Enviando...';
+            
+            // Enviar mensaje a través de Socket.IO
+            if (socket && socket.connected) {
+                console.log("Enviando mensaje a través de Socket.IO");
+                
+                // Emitir evento de mensaje
+                socket.emit('chat_message', {
+                    ticket_id: ticketId,
+                    content: message,
+                    sender_id: agentId,
+                    sender_name: agentName,
+                    sender_type: 'agent',
+                    is_internal: isInternal
+                });
+                
+                // Añadir mensaje a la interfaz inmediatamente para mejor UX
+                addMessage(message, 'agent', agentName, isInternal);
+                
+                // Limpiar formulario
+                messageInput.value = '';
+                document.getElementById('internalMessage').checked = false;
+                
+                // Restaurar botón
+                submitButton.disabled = false;
+                submitButton.innerHTML = originalText;
+            } else {
+                console.log("Socket.IO no disponible, intentando enviar por POST");
+                // Si la conexión con Socket.IO no está disponible, usar la forma tradicional
+                this.submit();
+                
+                // Mostrar mensaje de error
+                connectionStatus.textContent = 'Error de conexión: Usando método alternativo';
+                connectionStatus.className = 'connection-status alert alert-warning';
+                connectionStatus.style.display = 'block';
+                
+                // Auto-ocultar después de 3 segundos
+                setTimeout(() => {
+                    connectionStatus.style.display = 'none';
+                }, 3000);
+            }
+        });
+        
+        // Detectar escritura
+        messageInput.addEventListener('input', function() {
+            if (!isTyping) {
+                isTyping = true;
+                if (socket && socket.connected) {
+                    socket.emit('typing', {
+                        ticket_id: ticketId,
+                        sender_id: agentId,
+                        sender_type: 'agent',
+                        is_typing: true
+                    });
+                }
+            }
+            
+            // Limpiar timeout anterior
+            if (typingTimeout) {
+                clearTimeout(typingTimeout);
+            }
+            
+            // Establecer nuevo timeout
+            typingTimeout = setTimeout(function() {
+                isTyping = false;
+                if (socket && socket.connected) {
+                    socket.emit('typing', {
+                        ticket_id: ticketId,
+                        sender_id: agentId,
+                        sender_type: 'agent',
+                        is_typing: false
+                    });
+                }
+            }, 3000);
+        });
+        
+        // Manejar plantillas de respuesta
+        const responseTemplates = document.querySelectorAll('.response-template-item');
+        responseTemplates.forEach(template => {
+            template.addEventListener('click', function(e) {
+                e.preventDefault();
+                const templateText = this.getAttribute('data-template');
+                messageInput.value = templateText;
+                messageInput.focus();
+            });
+        });
+        
+        // Función para conectar a Socket.IO
+        function connectSocketIO() {
+            try {
+                // Construir la URL correcta para Socket.IO
+                // Socket.IO funciona mejor con la URL base del servidor sin path
+                const socketUrl = `${window.location.protocol}//${socketHost}:${socketPort}`;
+                console.log(`Conectando a Socket.IO: ${socketUrl}`);
+                
+                connectionStatus.textContent = 'Conectando al servidor...';
+                connectionStatus.className = 'connection-status alert alert-warning';
+                connectionStatus.style.display = 'block';
+                
+                // Inicializar Socket.IO con las opciones correctas
+                socket = io(socketUrl, {
+                    // El primer intento será con WebSocket, luego caerá a polling si es necesario
+                    transports: ['websocket', 'polling'],
+                    reconnection: true,
+                    reconnectionAttempts: 5,
+                    reconnectionDelay: 1000,
+                    timeout: 20000,
+                    // Habilitar debug para ver mensajes detallados en consola
+                    debug: true
+                });
+                
+                // Eventos de Socket.IO
+                socket.on('connect', function() {
+                    console.log('Socket.IO conectado con ID:', socket.id);
+                    connectionStatus.textContent = 'Conectado al servidor';
+                    connectionStatus.className = 'connection-status alert alert-success';
+                    
+                    // Auto-ocultar después de 3 segundos
+                    setTimeout(() => {
+                        connectionStatus.style.display = 'none';
+                    }, 3000);
+                    
+                    // Suscribirse al ticket
+                    socket.emit('subscribe_ticket', {
+                        ticket_id: ticketId,
+                        role: 'agent'
+                    });
+                    
+                    console.log('Suscripción enviada para ticket:', ticketId);
+                });
+                
+                socket.on('disconnect', function(reason) {
+                    console.log('Socket.IO desconectado, razón:', reason);
+                    connectionStatus.textContent = 'Desconectado. Reconectando...';
+                    connectionStatus.className = 'connection-status alert alert-danger';
+                    connectionStatus.style.display = 'block';
+                });
+                
+                socket.on('connect_error', function(error) {
+                    console.error('Error de conexión Socket.IO:', error);
+                    connectionStatus.textContent = 'Error de conexión: ' + error.message;
+                    connectionStatus.className = 'connection-status alert alert-danger';
+                    connectionStatus.style.display = 'block';
+                });
+                
+                // Manejar mensajes y eventos
+                socket.on('welcome', function(data) {
+                    console.log('Bienvenido a Socket.IO:', data);
+                });
+                
+                socket.on('subscription_confirmed', function(data) {
+                    console.log('Suscripción confirmada:', data);
+                });
+                
+                socket.on('chat_message', function(data) {
+                    console.log('Mensaje recibido:', data);
+                    
+                    // Si el mensaje es del usuario, añadirlo a la interfaz
+                    if (data.sender_type === 'user') {
+                        addMessage(data.content, 'user', 'Usuario', false);
+                    }
+                    // Si es un mensaje de otro agente, añadirlo también
+                    else if (data.sender_type === 'agent' && data.sender_id !== agentId) {
+                        addMessage(data.content, 'agent', data.sender_name, data.is_internal);
+                    }
+                });
+                
+                socket.on('message_sent', function(data) {
+                    console.log('Mensaje enviado correctamente:', data);
+                });
+                
+                socket.on('typing', function(data) {
+                    // Mostrar u ocultar indicador de escritura
+                    if (data.sender_type === 'user') {
+                        const typingIndicator = document.getElementById('typingIndicator');
+                        if (typingIndicator) {
+                            if (data.is_typing) {
+                                typingIndicator.classList.remove('d-none');
+                                scrollToBottom();
+                            } else {
+                                typingIndicator.classList.add('d-none');
+                            }
+                        }
+                    }
+                });
+                
+                socket.on('error', function(data) {
+                    console.error('Error en Socket.IO:', data);
+                    alert('Error: ' + (data.message || 'Error de comunicación'));
+                });
+                
+            } catch (error) {
+                console.error('Error al inicializar Socket.IO:', error);
+                connectionStatus.textContent = 'Error al conectar: ' + error.message;
+                connectionStatus.className = 'connection-status alert alert-danger';
+                connectionStatus.style.display = 'block';
+                
+                // Fallar silenciosamente - la app seguirá funcionando con POST
+            }
+        }
+        
+        // Añadir mensaje a la interfaz
+        function addMessage(content, senderType, senderName, isInternal) {
+            const chatHistory = document.getElementById('chatHistory');
+            if (!chatHistory) {
+                console.error('No se encontró el elemento chatHistory');
+                return;
+            }
+            
+            const now = new Date();
+            const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            
+            // Crear elemento de mensaje
+            const messageBlock = document.createElement('div');
+            messageBlock.className = `message-block message-${senderType} mb-3`;
+            
+            // Determinar clase y icono del avatar
+            let avatarClass = '';
+            let avatarIcon = '';
+            
+            if (senderType === 'user') {
+                avatarClass = 'bg-light text-dark';
+                avatarIcon = 'fas fa-user';
+            } else if (isInternal) {
+                avatarClass = 'bg-warning text-dark';
+                avatarIcon = 'fas fa-exclamation-triangle';
+            } else {
+                avatarClass = 'bg-success text-white';
+                avatarIcon = 'fas fa-headset';
+            }
+            
+            // Determinar clase del cuerpo del mensaje
+            let bodyClass = '';
+            
+            if (senderType === 'user') {
+                bodyClass = 'bg-light text-dark';
+            } else if (isInternal) {
+                bodyClass = 'bg-warning-light text-dark';
+            } else {
+                bodyClass = 'bg-success-light text-dark';
+            }
+            
+            // Contenido HTML del mensaje
+            messageBlock.innerHTML = `
+                <div class="d-flex align-items-start">
+                    <div class="message-avatar ${avatarClass}">
+                        <i class="${avatarIcon}"></i>
+                    </div>
+                    
+                    <div class="message-content ms-3 flex-grow-1">
+                        <div class="message-header d-flex justify-content-between align-items-center mb-1">
+                            <div class="message-sender fw-bold">
+                                ${senderName}
+                                ${isInternal ? '<span class="badge bg-warning ms-2">Nota interna</span>' : ''}
+                            </div>
+                            <div class="message-time small text-muted">
+                                ${timeString}
+                            </div>
+                        </div>
+                        
+                        <div class="message-body p-3 rounded ${bodyClass}">
+                            ${content.replace(/\n/g, '<br>')}
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Añadir mensaje al historial
+            chatHistory.appendChild(messageBlock);
+            
+            // Scroll al final
+            scrollToBottom();
+        }
+        
+        // Scroll al final de la conversación
+        function scrollToBottom() {
+            const chatHistory = document.getElementById('chatHistory');
+            if (chatHistory) {
+                chatHistory.scrollTop = chatHistory.scrollHeight;
+            }
+        }
+        
+        // Actualizar tiempo activo
+        function updateActiveTime() {
+            const creationDate = new Date('{{ ticket.fecha_creacion.isoformat() }}');
+            const activeTimeElement = document.getElementById('activeTime');
+            
+            if (!activeTimeElement) {
+                console.error('No se encontró el elemento activeTime');
+                return;
+            }
+            
+            function updateTime() {
+                const now = new Date();
+                const diffMs = now - creationDate;
+                const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
+                const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                
+                activeTimeElement.textContent = `${diffHrs}h ${diffMins}m`;
+            }
+            
+            // Actualizar tiempo inmediatamente
+            updateTime();
+            
+            // Actualizar cada minuto
+            setInterval(updateTime, 60000);
+        }
+    });
+</script>
+{% endblock %}

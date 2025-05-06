@@ -1,0 +1,161 @@
+{% extends 'base.html' %}
+
+{% block title %}Resultados de Embeddings - Panel de Administración SIACASA{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Inicio</a></li>
+<li class="breadcrumb-item"><a href="{{ url_for('training.index') }}">Entrenamiento</a></li>
+<li class="breadcrumb-item active" aria-current="page">Resultados de Embeddings</li>
+{% endblock %}
+
+{% block page_title %}Resultados de la Búsqueda Semántica{% endblock %}
+
+{% block page_actions %}
+<a href="{{ url_for('training.index') }}" class="btn btn-outline-primary">
+    <i class="fas fa-arrow-left me-2"></i> Volver
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <!-- Pregunta y Respuesta -->
+    <div class="col-md-12">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Pregunta</h5>
+                <span class="badge bg-primary">Búsqueda Semántica</span>
+            </div>
+            <div class="card-body">
+                <div class="mb-4">
+                    <div class="mb-3">
+                        <div class="p-3 bg-light rounded">
+                            <i class="fas fa-search text-primary me-2"></i>
+                            <strong>{{ query }}</strong>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mb-2">
+                    <h6 class="mb-3">Respuesta generada:</h6>
+                    <div class="p-4 rounded border">
+                        {{ answer | safe }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Textos Similares -->
+    <div class="col-md-12">
+        <div class="card shadow-sm">
+            <div class="card-header py-3">
+                <h5 class="mb-0">Fuentes de Información</h5>
+            </div>
+            <div class="card-body">
+                {% if similar_texts %}
+                <p class="text-muted mb-4">
+                    Se encontraron los siguientes fragmentos de texto relevantes para tu consulta. 
+                    Estos fragmentos se utilizaron para generar la respuesta.
+                </p>
+                
+                <div class="accordion" id="accordionSimilarTexts">
+                    {% for text in similar_texts %}
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="heading{{ loop.index }}">
+                            <button class="accordion-button {% if loop.index > 1 %}collapsed{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ loop.index }}" aria-expanded="{{ 'true' if loop.index == 1 else 'false' }}" aria-controls="collapse{{ loop.index }}">
+                                <div class="d-flex w-100 justify-content-between align-items-center">
+                                    <span>
+                                        <i class="fas fa-file-alt me-2"></i>
+                                        <strong>{{ text.filename }}</strong>
+                                    </span>
+                                    <span class="badge bg-primary ms-2">{{ (text.similarity * 100)|round(1) }}% de similitud</span>
+                                </div>
+                            </button>
+                        </h2>
+                        <div id="collapse{{ loop.index }}" class="accordion-collapse collapse {% if loop.index == 1 %}show{% endif %}" aria-labelledby="heading{{ loop.index }}" data-bs-parent="#accordionSimilarTexts">
+                            <div class="accordion-body">
+                                <div class="border-start border-4 border-primary ps-3 py-1 mb-3">
+                                    <small class="text-muted">Fragmento de texto:</small>
+                                </div>
+                                <div class="bg-light p-3 rounded mb-3">
+                                    {{ text.text|truncate(500) }}
+                                    {% if text.text|length > 500 %}
+                                    <a href="{{ url_for('training.file_details', file_id=text.file_id) }}" class="text-primary">Ver todo</a>
+                                    {% endif %}
+                                </div>
+                                <div class="d-flex justify-content-end">
+                                    <a href="{{ url_for('training.file_details', file_id=text.file_id) }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-eye me-1"></i> Ver archivo completo
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="fas fa-search fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">No se encontraron resultados</h5>
+                    <p class="text-muted">No hay fuentes de información relevantes para esta consulta</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Búsqueda adicional -->
+<div class="card shadow-sm mt-4">
+    <div class="card-header py-3">
+        <h5 class="mb-0">Realizar otra consulta</h5>
+    </div>
+    <div class="card-body">
+        <form action="{{ url_for('training.test_embedding') }}" method="POST">
+            <div class="mb-3">
+                <label for="query" class="form-label">Escribe una pregunta</label>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="query" name="query" placeholder="Ej: ¿Cuáles son los requisitos para abrir una cuenta de ahorros?" value="{{ query }}">
+                    <button class="btn btn-primary" type="submit">
+                        <i class="fas fa-search me-2"></i> Buscar
+                    </button>
+                </div>
+                <div class="form-text">La búsqueda utilizará embeddings para encontrar información relevante en tus documentos entrenados.</div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Explicación de la tecnología -->
+<div class="card shadow-sm mt-4">
+    <div class="card-header py-3">
+        <h5 class="mb-0">¿Cómo funciona?</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-12">
+                <p>
+                    La búsqueda semántica utiliza <strong>embeddings</strong> (representaciones vectoriales del significado) para encontrar 
+                    información relevante en documentos, incluso si las palabras exactas no coinciden.
+                </p>
+                
+                <div class="mb-3">
+                    <h6>El proceso es el siguiente:</h6>
+                    <ol>
+                        <li>Los documentos se dividen en fragmentos pequeños durante el entrenamiento.</li>
+                        <li>Cada fragmento se convierte en un vector de embedding que captura su significado.</li>
+                        <li>Cuando realizas una consulta, esta también se convierte en un vector de embedding.</li>
+                        <li>Se buscan los fragmentos cuyos embeddings son más similares al de la consulta.</li>
+                        <li>Los fragmentos más relevantes se utilizan para generar una respuesta coherente.</li>
+                    </ol>
+                </div>
+                
+                <div class="alert alert-info">
+                    <i class="fas fa-lightbulb me-2"></i>
+                    <strong>Consejo:</strong> Para obtener mejores resultados, entrena el chatbot con documentos actualizados y relevantes para tu banco.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
