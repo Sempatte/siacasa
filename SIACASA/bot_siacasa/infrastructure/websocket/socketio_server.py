@@ -182,6 +182,8 @@ class ChatSocketIOServer:
                 'timestamp': datetime.now().isoformat()
             })
         
+        # Esta parte modifica el manejador de eventos de 'chat_message' en socketio_server.py
+
         @self.socketio.on('chat_message')
         def handle_chat_message(data):
             try:
@@ -194,6 +196,8 @@ class ChatSocketIOServer:
                 sender_name = data.get('sender_name', 'Usuario')
                 sender_type = data.get('sender_type', 'user')  # Por defecto, asumir user si no se especifica
                 is_internal = data.get('is_internal', False)
+                # Nuevo: Recuperar el ID local si está presente
+                local_message_id = data.get('local_message_id')
                 
                 if not all([ticket_id, content, sender_id]):
                     logger.warning(f"Datos incompletos en mensaje: {data}")
@@ -219,6 +223,10 @@ class ChatSocketIOServer:
                     'is_internal': is_internal,
                     'timestamp': timestamp
                 }
+                
+                # Añadir el ID local si fue proporcionado (para evitar duplicados en el cliente)
+                if local_message_id:
+                    message['local_message_id'] = local_message_id
                 
                 # Guardar mensaje en la base de datos si es un mensaje de agente
                 if sender_type == "agent" and self.support_repository:
@@ -269,46 +277,104 @@ class ChatSocketIOServer:
                                 # Guardar cambios
                                 self.support_repository.guardar_ticket(ticket)
                                 logger.info(f"Mensaje de usuario agregado a la conversación del ticket {ticket_id}")
+                            else:
+                                logger.warning(f"Ticket no encontrado: {ticket_id}")
                     except Exception as e:
                         logger.error(f"Error al agregar mensaje de usuario a la conversación: {e}", exc_info=True)
+                        # Continuar a pesar del error
                 
                 # Emitir mensaje a todos los suscriptores del ticket
                 ticket_room = f'ticket_{ticket_id}'
                 logger.info(f"Emitiendo mensaje a la sala {ticket_room}")
                 
-                # Broadcast normal a todos en la sala del ticket
+                # MODIFICACIÓN: Broadcast a todos en la sala EXCEPTO el remitente original
+                # Esto evita que la persona que envía el mensaje lo reciba de nuevo
                 self.socketio.emit('chat_message', message, room=ticket_room, include_self=False)
                 
                 # Si el mensaje es de un agente, enviarlo también al usuario
                 if sender_type == "agent" and not is_internal:
                     # Obtener ID de usuario del ticket
                     user_id = None
-                    if hasattr(self.support_repository, 'obtener_usuario_por_ticket'):
+                    if ticket_id in self.ticket_users:
+                        user_id = self.ticket_users[ticket_id]
+                    elif hasattr(self.support_repository, 'obtener_usuario_por_ticket'):
                         user_id = self.support_repository.obtener_usuario_por_ticket(ticket_id)
+                        # Guardar en caché para futuro uso
+                        if user_id:
+                            self.ticket_users[ticket_id] = user_id
                     
                     if user_id:
                         # Emitir a la sala del usuario
                         user_room = f'user_{user_id}'
                         logger.info(f"Emitiendo mensaje al usuario {user_id} en sala {user_room}")
-                        self.socketio.emit('widget_message', {
-                            'user_id': user_id,
-                            'message': message
-                        }, room=user_room)
+                        
+                        try:
+                            self.socketio.emit('widget_message', {
+                                'user_id': user_id,
+                                'message': message
+                            }, room=user_room)
+                        except Exception as e:
+                            logger.error(f"Error al emitir mensaje a sala de usuario {user_room}: {e}", exc_info=True)
                         
                         # Enviar directamente si está conectado
                         if user_id in self.user_connections:
                             user_sid = self.user_connections[user_id]
                             logger.info(f"Enviando mensaje directo al usuario {user_id}")
-                            self.socketio.emit('direct_message', message, room=user_sid)
+                            
+                            try:
+                                self.socketio.emit('direct_message', message, room=user_sid)
+                            except Exception as e:
+                                logger.error(f"Error al enviar mensaje directo al usuario {user_id}: {e}", exc_info=True)
+                
+                # Si el mensaje es de un usuario, notificar a todos los agentes suscritos
+                elif sender_type == "user":
+                    # Obtener agente asignado al ticket
+                    agent_id = None
+                    if hasattr(self.support_repository, 'obtener_ticket'):
+                        ticket = self.support_repository.obtener_ticket(ticket_id)
+                        if ticket and ticket.agente_id:
+                            agent_id = ticket.agente_id
+                    
+                    if agent_id:
+                        # Notificar al agente específico
+                        agent_room = f'agent_{agent_id}'
+                        logger.info(f"Notificando al agente {agent_id} en sala {agent_room}")
+                        
+                        try:
+                            self.socketio.emit('new_user_message', message, room=agent_room)
+                        except Exception as e:
+                            logger.error(f"Error al notificar al agente {agent_id}: {e}", exc_info=True)
+                        
+                        # Enviar notificación directa si está conectado
+                        if agent_id in self.agent_connections:
+                            agent_sid = self.agent_connections[agent_id]
+                            logger.info(f"Enviando notificación directa al agente {agent_id}")
+                            
+                            try:
+                                self.socketio.emit('new_user_message', message, room=agent_sid)
+                            except Exception as e:
+                                logger.error(f"Error al enviar notificación directa al agente {agent_id}: {e}", exc_info=True)
+                    else:
+                        # Notificar a todos los agentes si no hay uno específico asignado
+                        logger.info("No hay agente asignado, notificando a todos los agentes")
+                        
+                        try:
+                            self.socketio.emit('pending_message', {
+                                'ticket_id': ticket_id,
+                                'message': message
+                            }, broadcast=True)
+                        except Exception as e:
+                            logger.error(f"Error al notificar a todos los agentes: {e}", exc_info=True)
                 
                 # Enviar confirmación al remitente
                 emit('message_sent', {
                     'message_id': message_id,
+                    'local_message_id': local_message_id,  # Devolver el ID local si existe
                     'timestamp': timestamp,
                     'status': 'success'
                 })
                 
-                logger.info(f"Mensaje enviado correctamente a ticket {ticket_id}")
+                logger.info(f"Mensaje procesado correctamente: ticket {ticket_id}, remitente {sender_type}")
                 
             except Exception as e:
                 logger.error(f"Error en handle_chat_message: {e}", exc_info=True)
@@ -316,6 +382,7 @@ class ChatSocketIOServer:
                     'message': f'Error en el servidor: {str(e)}',
                     'timestamp': datetime.now().isoformat()
                 })
+                
         @self.socketio.on('typing')
         def handle_typing(data):
             ticket_id = data.get('ticket_id')

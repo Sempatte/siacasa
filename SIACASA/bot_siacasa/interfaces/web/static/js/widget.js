@@ -1002,7 +1002,7 @@
         });
 
         // Manejador para mensajes del widget
-        socket.on('widget_message', function(data) {
+        /* socket.on('widget_message', function(data) {
             console.log('Mensaje de widget recibido:', data);
             
             // Verificar si este mensaje es para este usuario
@@ -1020,7 +1020,7 @@
                     );
                 }
             }
-        });
+        }); */
 
 
         
