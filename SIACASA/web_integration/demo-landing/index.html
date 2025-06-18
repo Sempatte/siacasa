@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Banco de la Nación - Tu banco de confianza</title>
+    <title>Caja Rural Los Andes - Tu caja de confianza</title>
 
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -15,10 +15,11 @@
             theme: {
                 extend: {
                     colors: {
-                        primary: '#004a87',      // Azul institucional
-                        secondary: '#e4002b',    // Rojo institucional
+                        primary: '#1B5E20',      // Verde andino
+                        secondary: '#FF8F00',    // Naranja dorado
                         tertiary: '#f5f5f5',     // Gris claro para fondos
                         dark: '#333333',         // Texto oscuro
+                        accent: '#4CAF50',       // Verde claro
                     }
                 }
             }
@@ -32,13 +33,13 @@
     <script>
         // Configuración global del chatbot
         window.SIACASA_CONFIG = {
-            botName: "Agente virtual",
-            botSubtitle: "Asistente Inteligente del Banco de la Nación",
+            botName: "Asistente Virtual",
+            botSubtitle: "Caja Rural Los Andes",
             apiEndpoint: "http://localhost:3200/api/mensaje",
-            initialMessage: "Hola, soy SIACASA, tu asistente virtual del Banco de la Nación. ¿En qué puedo ayudarte hoy?",
+            initialMessage: "Hola, soy SIACASA, tu asistente virtual de Caja Rural Los Andes. ¿En qué puedo ayudarte hoy?",
             theme: {
-                primaryColor: "#BA1400",
-                secondaryColor: "#e4002b",
+                primaryColor: "#1B5E20",
+                secondaryColor: "#FF8F00",
                 textColor: "#333333"
             }
         };
@@ -51,30 +52,35 @@
         <div class="container mx-auto px-4 py-3 flex justify-between items-center">
             <!-- Logo -->
             <div class="flex items-center">
-                <img src="https://www.fonafe.gob.pe/pw_content/empresas/17/Img/BancoNacion.png?1641454588"
-                    alt="Logo Banco de la Nación" class="h-10 mr-3">
+                <div class="w-12 h-12 bg-primary rounded-full flex items-center justify-center text-white font-bold text-lg mr-3">
+                    <i class="fas fa-mountain"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-primary">Caja Rural Los Andes</h1>
+                    <p class="text-xs text-gray-500">CRAC Los Andes</p>
+                </div>
             </div>
 
             <!-- Menú principal -->
             <div class="hidden md:flex space-x-6">
-                <a href="#" class="hover:text-gray-300">Inicio</a>
-                <a href="#" class="hover:text-gray-300">Productos</a>
-                <a href="#" class="hover:text-gray-300">Servicios</a>
-                <a href="#" class="hover:text-gray-300">Agencias</a>
-                <a href="#" class="hover:text-gray-300">Contacto</a>
+                <a href="#" class="hover:text-primary transition-colors">Inicio</a>
+                <a href="#" class="hover:text-primary transition-colors">Productos</a>
+                <a href="#" class="hover:text-primary transition-colors">Microcréditos</a>
+                <a href="#" class="hover:text-primary transition-colors">Agencias</a>
+                <a href="#" class="hover:text-primary transition-colors">Contacto</a>
             </div>
 
             <!-- Botón de banca por internet -->
             <div>
                 <a href="#"
-                    class="bg-secondary hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">
-                    <i class="fas fa-lock mr-1"></i> Banca en Línea
+                    class="bg-primary hover:bg-green-800 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                    <i class="fas fa-lock mr-1"></i> Banca Digital
                 </a>
             </div>
 
             <!-- Menú móvil -->
             <div class="md:hidden">
-                <button class="text-white focus:outline-none">
+                <button class="text-primary focus:outline-none">
                     <i class="fas fa-bars text-xl"></i>
                 </button>
             </div>
@@ -82,25 +88,30 @@
     </nav>
 
     <!-- Hero Section -->
-    <section class="bg-[#BA1400] text-white py-16">
+    <section class="bg-gradient-to-r from-primary to-accent text-white py-16">
         <div class="container mx-auto px-4 md:flex items-center">
             <div class="md:w-1/2 md:pr-8">
-                <h1 class="text-4xl md:text-5xl font-bold mb-4">Bienvenido al banco de todos los peruanos</h1>
-                <p class="text-lg mb-8">Ofrecemos soluciones financieras accesibles y seguras para mejorar tu calidad de
-                    vida.</p>
+                <h1 class="text-4xl md:text-5xl font-bold mb-4">Impulsamos el desarrollo de tu comunidad</h1>
+                <p class="text-lg mb-8">Somos la caja rural que entiende tus necesidades. Ofrecemos productos financieros diseñados especialmente para emprendedores, agricultores y familias de la sierra peruana.</p>
                 <div class="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4">
                     <a href="#"
                         class="bg-white text-primary hover:bg-gray-200 font-bold py-3 px-6 rounded-lg transition-colors text-center">
                         Conoce nuestros productos
                     </a>
                     <a href="#"
-                        class="bg-secondary hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg transition-colors text-center">
-                        Abre tu cuenta ahora
+                        class="bg-secondary hover:bg-orange-600 text-white font-bold py-3 px-6 rounded-lg transition-colors text-center">
+                        Solicita tu crédito
                     </a>
                 </div>
             </div>
             <div class="md:w-1/2 mt-8 md:mt-0">
-                <img src="https://www.bn.com.pe/img/banner/AppBN.png" alt="Banco de la Nación">
+                <div class="bg-white/10 rounded-lg p-8 backdrop-blur-sm">
+                    <div class="text-center">
+                        <i class="fas fa-seedling text-6xl text-secondary mb-4"></i>
+                        <h3 class="text-2xl font-bold mb-2">Hacemos crecer tu negocio</h3>
+                        <p class="text-white/90">Con más de 20 años apoyando el desarrollo rural</p>
+                    </div>
+                </div>
             </div>
         </div>
     </section>
@@ -116,89 +127,136 @@
                     <div class="bg-primary h-2"></div>
                     <div class="p-6">
                         <div class="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-                            <i class="fas fa-credit-card text-primary text-2xl"></i>
+                            <i class="fas fa-tractor text-primary text-2xl"></i>
                         </div>
-                        <h3 class="text-xl font-bold mb-2 text-dark">Cuentas y Tarjetas</h3>
-                        <p class="text-gray-600 mb-4">Abre tu cuenta de ahorros y accede a nuestra tarjeta de débito
-                            Multired para realizar todas tus operaciones.</p>
+                        <h3 class="text-xl font-bold mb-2 text-dark">Crédito Agropecuario</h3>
+                        <p class="text-gray-600 mb-4">Financiamiento especial para actividades agrícolas, ganaderas y de crianza. Plazos flexibles según tu ciclo productivo.</p>
                         <a href="#" class="text-primary font-semibold hover:underline">Saber más →</a>
                     </div>
                 </div>
 
                 <!-- Tarjeta 2 -->
                 <div class="bg-white rounded-lg shadow-lg overflow-hidden transition-transform hover:scale-105">
-                    <div class="bg-primary h-2"></div>
+                    <div class="bg-secondary h-2"></div>
                     <div class="p-6">
-                        <div class="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-                            <i class="fas fa-hand-holding-usd text-primary text-2xl"></i>
+                        <div class="w-16 h-16 bg-secondary/10 rounded-full flex items-center justify-center mb-4">
+                            <i class="fas fa-store text-secondary text-2xl"></i>
                         </div>
-                        <h3 class="text-xl font-bold mb-2 text-dark">Préstamos Personales</h3>
-                        <p class="text-gray-600 mb-4">Préstamos con las mejores tasas del mercado para empleados
-                            públicos y pensionistas.</p>
-                        <a href="#" class="text-primary font-semibold hover:underline">Saber más →</a>
+                        <h3 class="text-xl font-bold mb-2 text-dark">Microempresas</h3>
+                        <p class="text-gray-600 mb-4">Impulsa tu negocio con nuestros microcréditos. Capital de trabajo, activo fijo y todo lo que necesitas para crecer.</p>
+                        <a href="#" class="text-secondary font-semibold hover:underline">Saber más →</a>
                     </div>
                 </div>
 
                 <!-- Tarjeta 3 -->
                 <div class="bg-white rounded-lg shadow-lg overflow-hidden transition-transform hover:scale-105">
-                    <div class="bg-primary h-2"></div>
+                    <div class="bg-accent h-2"></div>
                     <div class="p-6">
-                        <div class="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-                            <i class="fas fa-mobile-alt text-primary text-2xl"></i>
+                        <div class="w-16 h-16 bg-accent/10 rounded-full flex items-center justify-center mb-4">
+                            <i class="fas fa-piggy-bank text-accent text-2xl"></i>
                         </div>
-                        <h3 class="text-xl font-bold mb-2 text-dark">Banca Móvil</h3>
-                        <p class="text-gray-600 mb-4">Realiza tus operaciones bancarias desde cualquier lugar a través
-                            de nuestra aplicación móvil.</p>
-                        <a href="#" class="text-primary font-semibold hover:underline">Saber más →</a>
+                        <h3 class="text-xl font-bold mb-2 text-dark">Ahorros Rurales</h3>
+                        <p class="text-gray-600 mb-4">Cuentas de ahorro diseñadas para el campo. Sin comisiones de mantenimiento y con beneficios especiales.</p>
+                        <a href="#" class="text-accent font-semibold hover:underline">Saber más →</a>
                     </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Sección de ventajas -->
+    <section class="py-16 bg-white">
+        <div class="container mx-auto px-4">
+            <h2 class="text-3xl font-bold text-center mb-12 text-dark">¿Por qué elegir Caja Rural Los Andes?</h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <!-- Ventaja 1 -->
+                <div class="text-center p-6">
+                    <div class="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-handshake text-primary text-3xl"></i>
+                    </div>
+                    <h3 class="text-lg font-bold mb-2 text-dark">Cercanos a ti</h3>
+                    <p class="text-gray-600">Conocemos tu comunidad y entendemos tus necesidades locales.</p>
+                </div>
+
+                <!-- Ventaja 2 -->
+                <div class="text-center p-6">
+                    <div class="w-20 h-20 bg-secondary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-clock text-secondary text-3xl"></i>
+                    </div>
+                    <h3 class="text-lg font-bold mb-2 text-dark">Respuesta rápida</h3>
+                    <p class="text-gray-600">Evaluación y aprobación de créditos en tiempo récord.</p>
+                </div>
+
+                <!-- Ventaja 3 -->
+                <div class="text-center p-6">
+                    <div class="w-20 h-20 bg-accent/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-leaf text-accent text-3xl"></i>
+                    </div>
+                    <h3 class="text-lg font-bold mb-2 text-dark">Compromiso social</h3>
+                    <p class="text-gray-600">Apoyamos el desarrollo sostenible de las comunidades rurales.</p>
+                </div>
+
+                <!-- Ventaja 4 -->
+                <div class="text-center p-6">
+                    <div class="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-shield-alt text-primary text-3xl"></i>
+                    </div>
+                    <h3 class="text-lg font-bold mb-2 text-dark">Confianza y seguridad</h3>
+                    <p class="text-gray-600">Más de 20 años respaldando el crecimiento del sector rural.</p>
                 </div>
             </div>
         </div>
     </section>
 
     <!-- Sección de indicadores -->
-    <section class="py-16 bg-white">
+    <section class="py-16 bg-gradient-to-r from-primary to-accent text-white">
         <div class="container mx-auto px-4">
-            <h2 class="text-3xl font-bold text-center mb-12 text-dark">¿Por qué elegirnos?</h2>
+            <h2 class="text-3xl font-bold text-center mb-12">Nuestros Números</h2>
 
             <div class="grid grid-cols-1 md:grid-cols-4 gap-6 text-center">
                 <!-- Indicador 1 -->
                 <div class="p-6">
-                    <div class="text-primary text-4xl font-bold mb-2">+190</div>
-                    <div class="text-gray-600">Años de experiencia</div>
+                    <div class="text-secondary text-4xl font-bold mb-2">20+</div>
+                    <div class="text-white/90">Años de experiencia</div>
                 </div>
 
                 <!-- Indicador 2 -->
                 <div class="p-6">
-                    <div class="text-primary text-4xl font-bold mb-2">+500</div>
-                    <div class="text-gray-600">Agencias en todo el país</div>
+                    <div class="text-secondary text-4xl font-bold mb-2">35</div>
+                    <div class="text-white/90">Agencias en la sierra</div>
                 </div>
 
                 <!-- Indicador 3 -->
                 <div class="p-6">
-                    <div class="text-primary text-4xl font-bold mb-2">+10M</div>
-                    <div class="text-gray-600">Clientes satisfechos</div>
+                    <div class="text-secondary text-4xl font-bold mb-2">50K+</div>
+                    <div class="text-white/90">Familias beneficiadas</div>
                 </div>
 
                 <!-- Indicador 4 -->
                 <div class="p-6">
-                    <div class="text-primary text-4xl font-bold mb-2">24/7</div>
-                    <div class="text-gray-600">Atención al cliente</div>
+                    <div class="text-secondary text-4xl font-bold mb-2">95%</div>
+                    <div class="text-white/90">Tasa de recuperación</div>
                 </div>
             </div>
         </div>
     </section>
 
     <!-- Sección de llamado a la acción -->
-    <section class="py-16 bg-primary text-white">
+    <section class="py-16 bg-secondary text-white">
         <div class="container mx-auto px-4 text-center">
-            <h2 class="text-3xl font-bold mb-6">Comienza a disfrutar de nuestros beneficios</h2>
-            <p class="text-lg mb-8 max-w-2xl mx-auto">Abre tu cuenta en minutos y accede a todos nuestros servicios
-                financieros con las mejores condiciones del mercado.</p>
-            <a href="#"
-                class="bg-white text-primary hover:bg-gray-200 font-bold py-3 px-8 rounded-lg transition-colors inline-block">
-                Abrir cuenta ahora
-            </a>
+            <h2 class="text-3xl font-bold mb-6">¿Listo para hacer crecer tu negocio?</h2>
+            <p class="text-lg mb-8 max-w-2xl mx-auto">Únete a miles de emprendedores que han confiado en nosotros para impulsar sus proyectos. Te acompañamos en cada paso de tu crecimiento.</p>
+            <div class="flex flex-col sm:flex-row justify-center space-y-3 sm:space-y-0 sm:space-x-4">
+                <a href="#"
+                    class="bg-white text-secondary hover:bg-gray-200 font-bold py-3 px-8 rounded-lg transition-colors inline-block">
+                    Solicitar crédito
+                </a>
+                <a href="#"
+                    class="bg-primary hover:bg-green-800 text-white font-bold py-3 px-8 rounded-lg transition-colors inline-block">
+                    Abrir cuenta de ahorros
+                </a>
+            </div>
         </div>
     </section>
 
@@ -208,9 +266,16 @@
             <div class="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
                 <!-- Columna 1 -->
                 <div>
-                    <h3 class="text-xl font-bold mb-4">Banco de la Nación</h3>
-                    <p class="text-gray-400">El banco de todos los peruanos, comprometido con la inclusión financiera y
-                        el desarrollo del país.</p>
+                    <div class="flex items-center mb-4">
+                        <div class="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-white font-bold mr-3">
+                            <i class="fas fa-mountain"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-bold">Caja Rural Los Andes</h3>
+                            <p class="text-sm text-gray-400">CRAC Los Andes</p>
+                        </div>
+                    </div>
+                    <p class="text-gray-400">Comprometidos con el desarrollo económico y social de las comunidades rurales del Perú.</p>
                 </div>
 
                 <!-- Columna 2 -->
@@ -218,7 +283,8 @@
                     <h3 class="text-lg font-semibold mb-4">Enlaces rápidos</h3>
                     <ul class="space-y-2">
                         <li><a href="#" class="text-gray-400 hover:text-white">Inicio</a></li>
-                        <li><a href="#" class="text-gray-400 hover:text-white">Productos</a></li>
+                        <li><a href="#" class="text-gray-400 hover:text-white">Créditos</a></li>
+                        <li><a href="#" class="text-gray-400 hover:text-white">Ahorros</a></li>
                         <li><a href="#" class="text-gray-400 hover:text-white">Servicios</a></li>
                         <li><a href="#" class="text-gray-400 hover:text-white">Preguntas frecuentes</a></li>
                     </ul>
@@ -230,15 +296,19 @@
                     <ul class="space-y-2 text-gray-400">
                         <li class="flex items-start">
                             <i class="fas fa-map-marker-alt mt-1 mr-2"></i>
-                            <span>Av. Javier Prado Este 2499, San Borja, Lima</span>
+                            <span>Av. Los Incas 245, Huancayo, Junín</span>
                         </li>
                         <li class="flex items-center">
                             <i class="fas fa-phone-alt mr-2"></i>
-                            <span>0800-10-700</span>
+                            <span>(064) 234-567</span>
                         </li>
                         <li class="flex items-center">
                             <i class="fas fa-envelope mr-2"></i>
-                            <span>info@bn.com.pe</span>
+                            <span>info@craclosandes.com.pe</span>
+                        </li>
+                        <li class="flex items-center">
+                            <i class="fas fa-globe mr-2"></i>
+                            <span>www.craclosandes.com.pe</span>
                         </li>
                     </ul>
                 </div>
@@ -246,7 +316,7 @@
                 <!-- Columna 4 -->
                 <div>
                     <h3 class="text-lg font-semibold mb-4">Síguenos</h3>
-                    <div class="flex space-x-4">
+                    <div class="flex space-x-4 mb-4">
                         <a href="#"
                             class="bg-blue-600 w-10 h-10 rounded-full flex items-center justify-center hover:bg-blue-700">
                             <i class="fab fa-facebook-f"></i>
@@ -264,13 +334,17 @@
                             <i class="fab fa-youtube"></i>
                         </a>
                     </div>
+                    <div class="text-sm text-gray-400">
+                        <p class="mb-2">Supervisados por la SBS</p>
+                        <p>RUC: 20123456789</p>
+                    </div>
                 </div>
             </div>
 
             <div class="border-t border-gray-700 pt-6">
                 <div class="flex flex-col md:flex-row justify-between items-center">
                     <div class="mb-4 md:mb-0">
-                        <p class="text-gray-400">© 2025 Banco de la Nación. Todos los derechos reservados.</p>
+                        <p class="text-gray-400">© 2025 Caja Rural de Ahorro y Crédito Los Andes. Todos los derechos reservados.</p>
                     </div>
                     <div class="flex space-x-4">
                         <a href="#" class="text-gray-400 hover:text-white">Términos y condiciones</a>
