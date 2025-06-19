@@ -1,7 +1,8 @@
-from sqlalchemy import create_engine, Column, String, Float, Integer, Boolean, DateTime, Text, JSON
+# bot_siacasa/metrics/database.py
+from sqlalchemy import create_engine, Column, String, Float, Integer, Boolean, DateTime, Text, JSON, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import sessionmaker, Session, relationship
 from sqlalchemy.sql import func
 import uuid
 from datetime import datetime
@@ -38,50 +39,57 @@ class DBSession(Base):
     sentiment_journey = Column(JSON, nullable=True)  # Lista de sentimientos
     emotion_improvement = Column(Boolean, default=False)
     queries_resolved = Column(Integer, default=0)
-    banking_services_used = Column(JSON, nullable=True)  # Lista de servicios
-    total_processing_time_ms = Column(Float, default=0)
-    total_tokens_used = Column(Integer, default=0)
+    banking_services_used = Column(JSON, nullable=True)  # Lista de servicios bancarios utilizados
+    avg_response_time_ms = Column(Float, default=0)
+    session_duration_seconds = Column(Float, default=0)
     
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Relación con mensajes
+    messages = relationship("DBMessage", back_populates="session")
 
 class DBMessage(Base):
     __tablename__ = "chat_messages"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    session_id = Column(UUID(as_uuid=True), nullable=False, index=True)
-    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+    session_id = Column(UUID(as_uuid=True), ForeignKey('chat_sessions.id'), nullable=False, index=True)
     user_message = Column(Text, nullable=False)
     bot_response = Column(Text, nullable=False)
+    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Métricas del mensaje
     sentiment = Column(String(20), nullable=False)
-    sentiment_confidence = Column(Float, nullable=False)
-    intent = Column(String(50), nullable=False)
-    intent_confidence = Column(Float, nullable=False)
-    processing_time_ms = Column(Float, nullable=False)
-    token_count = Column(Integer, nullable=False)
-    is_escalation_request = Column(Boolean, default=False)
-    user_satisfaction = Column(Integer, nullable=True)
+    sentiment_confidence = Column(Float, default=0.0)
+    intent = Column(String(100), nullable=True)
+    intent_confidence = Column(Float, default=0.0)
+    processing_time_ms = Column(Float, default=0.0)
+    token_count = Column(Integer, default=0)
     
-    # Entidades detectadas (JSON)
+    # Análisis avanzado
     detected_entities = Column(JSON, nullable=True)
-    response_tone = Column(String(50), nullable=True)
+    is_escalation_request = Column(Boolean, default=False)
+    response_tone = Column(String(20), nullable=True)
+    banking_service_category = Column(String(50), nullable=True)
     
-    created_at = Column(DateTime, default=datetime.utcnow)
+    # Relación con sesión
+    session = relationship("DBSession", back_populates="messages")
 
 class DBDailyMetrics(Base):
     __tablename__ = "daily_metrics"
     
-    id = Column(Integer, primary_key=True)
-    date = Column(DateTime, nullable=False, unique=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    date = Column(DateTime, nullable=False, unique=True, index=True)
+    
+    # Métricas básicas
     total_sessions = Column(Integer, default=0)
     total_messages = Column(Integer, default=0)
     avg_messages_per_session = Column(Float, default=0)
+    avg_session_duration_seconds = Column(Float, default=0)
+    avg_response_time_ms = Column(Float, default=0)
+    
+    # Métricas de efectividad
     resolution_rate = Column(Float, default=0)
     escalation_rate = Column(Float, default=0)
     sentiment_improvement_rate = Column(Float, default=0)
     avg_satisfaction_score = Column(Float, nullable=True)
-    avg_session_duration_seconds = Column(Float, default=0)
-    avg_response_time_ms = Column(Float, default=0)
     
     # Distribuciones (JSON)
     intent_distribution = Column(JSON, nullable=True)
