@@ -66,7 +66,10 @@
               href="{{ url_for('support.index') }}"
             >
               <i class="fas fa-headset me-2"></i> Soporte
-              <span class="badge bg-danger ms-2" id="pendingTicketsCount"></span>
+              <span
+                class="badge bg-danger ms-2"
+                id="pendingTicketsCount"
+              ></span>
             </a>
           </li>
           <li class="nav-item">
@@ -79,10 +82,10 @@
           </li>
           <li class="nav-item">
             <a
-              class="nav-link {% if request.endpoint and request.endpoint.startswith('analytics') %}active{% endif %}"
-              href="#"
+              class="nav-link {{ 'active' if request.endpoint and 'analytics' in request.endpoint else '' }}"
+              href="{{ url_for('analytics.index') }}"
             >
-              <i class="fas fa-chart-line me-2"></i> Análisis
+              <i class="fas fa-chart-line"></i> Análisis
             </a>
           </li>
           <li class="nav-item">

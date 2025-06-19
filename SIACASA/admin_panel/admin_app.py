@@ -15,6 +15,7 @@ from admin_panel.auth.auth_controller import auth_blueprint
 from admin_panel.training.training_controller import training_blueprint
 from admin_panel.support.support_controller import support_blueprint
 from admin_panel.auth.auth_middleware import login_required
+from admin_panel.analytics.analytics_controller import analytics_blueprint
 
 # Importar conector de base de datos
 from bot_siacasa.infrastructure.db.neondb_connector import NeonDBConnector
@@ -89,6 +90,7 @@ class AdminPanel:
         self.app.register_blueprint(training_blueprint, url_prefix='/training')
         self.app.register_blueprint(auth_blueprint)
         self.app.register_blueprint(support_blueprint, url_prefix='/support')
+        self.app.register_blueprint(analytics_blueprint, url_prefix='/analytics')
         
         self.app.jinja_env.filters['nl2br'] = nl2br  # Registrar filtro nl2br
         
@@ -291,6 +293,11 @@ class AdminPanel:
                     'error': 'Error al obtener estadísticas detalladas',
                     'timestamp': datetime.now().isoformat()
                 }), 500
+        @self.app.route('/analytics')
+        @login_required
+        def analytics_redirect():
+            """Redirecciona al dashboard de analytics."""
+            return redirect(url_for('analytics.index'))
                 
         @self.app.route('/api/admin/cerrar-sesiones-inactivas', methods=['POST'])
         @login_required  # Asegúrate de que esta ruta esté protegida
