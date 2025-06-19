@@ -2,11 +2,14 @@
 """
 Script para inicializar el sistema de métricas SIACASA
 """
-import sys
 import os
+import sys
+from datetime import datetime, timedelta
 
-# Agregar el directorio raíz al path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Añadir el directorio raíz del proyecto al sys.path
+# Esto permite que el script encuentre el paquete bot_siacasa
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, project_root)
 
 from bot_siacasa.metrics.database import init_database, reset_database
 from bot_siacasa.metrics.collector import metrics_collector
