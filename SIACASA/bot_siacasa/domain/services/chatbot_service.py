@@ -269,7 +269,7 @@ Características:
             mensaje_usuario = Mensaje(
                 role="user",
                 content=texto_mensaje,
-                sentimental_score=sentimental_score,
+                sentiment_score=sentimental_score,  # ← Corregido
                 processing_time_ms=round(processing_time_ms)
             )
             
