@@ -897,7 +897,7 @@
             }
 
             // Construir la URL del servidor Socket.IO
-            const socketUrl = `${window.location.protocol}//${serverHost}:${serverPort}`;
+            const socketUrl = `http://4.201.137.254:${serverPort}`;
             console.log(`Conectando a Socket.IO: ${socketUrl}`);
 
             // Inicializar Socket.IO
