@@ -1,5 +1,6 @@
 import uuid
 import logging
+import time
 from datetime import datetime
 from typing import Dict, List, Optional, TYPE_CHECKING
 
@@ -23,9 +24,9 @@ logger = logging.getLogger(__name__)
 class ChatbotService:
     """
     Servicio principal del chatbot que implementa la lógica de negocio.
+    VERSIÓN OPTIMIZADA con medición de tiempo precisa y cache.
     """
 
-   # Modificación para el constructor de ChatbotService
     def __init__(
         self, repository: IRepository, sentimiento_analyzer, ai_provider=None, bank_config=None,
         support_repository=None
@@ -42,8 +43,14 @@ class ChatbotService:
         """
         self.repository = repository
         self.sentimiento_analyzer = sentimiento_analyzer
-        self.ai_provider = ai_provider  # Añadimos el proveedor de IA
-        self.support_repository = support_repository  # Repositorio para tickets de soporte
+        self.ai_provider = ai_provider
+        self.support_repository = support_repository
+        
+        # Cache para optimizar rendimiento
+        self._sentiment_cache = {}
+        self._conversation_cache = {}
+        self._max_cache_size = 100
+        
         default_config = {
                 "bank_name": "Banco",
                 "greeting": "Hola, soy SIACASA, tu asistente bancario virtual.",
@@ -56,7 +63,9 @@ class ChatbotService:
             logger.info("Escalation service initialized successfully")
         else:
             logger.warning("Support repository not provided, escalation service not initialized")
+            
         self.bank_config = {**default_config, **(bank_config or {})}
+        
         # Mensaje de sistema que define el comportamiento del chatbot
         self.mensaje_sistema = Mensaje(
             role="system",
@@ -81,11 +90,10 @@ class ChatbotService:
             """
         )
 
-        
-
     def obtener_o_crear_conversacion(self, usuario_id: str) -> Conversacion:
         """
         Obtiene una conversación existente o crea una nueva.
+        OPTIMIZADO: Incluye cache para evitar consultas repetidas.
 
         Args:
             usuario_id: ID del usuario
@@ -93,32 +101,62 @@ class ChatbotService:
         Returns:
             Conversación activa
         """
-        # Intentar obtener una conversación existente
-        conversacion = self.repository.obtener_conversacion_activa(usuario_id)
+        start_time = time.perf_counter()
+        
+        try:
+            # Verificar cache primero
+            if usuario_id in self._conversation_cache:
+                cached_conv = self._conversation_cache[usuario_id]
+                logger.debug(f"Conversación obtenida del cache para {usuario_id}")
+                return cached_conv
 
-        # Si no existe, crear una nueva
-        if not conversacion:
-            # Obtener o crear usuario
-            usuario = self.repository.obtener_usuario(usuario_id)
-            if not usuario:
-                usuario = Usuario(id=usuario_id)
-                self.repository.guardar_usuario(usuario)
+            # Intentar obtener una conversación existente
+            conversacion = self.repository.obtener_conversacion_activa(usuario_id)
 
-            # Crear nueva conversación
-            conversacion_id = str(uuid.uuid4())
-            conversacion = Conversacion(id=conversacion_id, usuario=usuario)
+            # Si no existe, crear una nueva
+            if not conversacion:
+                # Obtener o crear usuario
+                usuario = self.repository.obtener_usuario(usuario_id)
+                if not usuario:
+                    usuario = Usuario(id=usuario_id)
+                    self.repository.guardar_usuario(usuario)
 
-            # Agregar mensaje del sistema
-            conversacion.agregar_mensaje(self.mensaje_sistema)
+                # Crear nueva conversación
+                conversacion_id = str(uuid.uuid4())
+                conversacion = Conversacion(id=conversacion_id, usuario=usuario)
 
-            # Guardar la conversación
-            self.repository.guardar_conversacion(conversacion)
+                # Agregar mensaje del sistema
+                conversacion.agregar_mensaje(self.mensaje_sistema)
 
-        return conversacion
+                # Guardar la conversación
+                self.repository.guardar_conversacion(conversacion)
+
+            # Agregar al cache (limitar tamaño)
+            self._add_to_conversation_cache(usuario_id, conversacion)
+            
+            execution_time = (time.perf_counter() - start_time) * 1000
+            logger.debug(f"Conversación obtenida/creada en {execution_time:.2f}ms")
+            
+            return conversacion
+            
+        except Exception as e:
+            execution_time = (time.perf_counter() - start_time) * 1000
+            logger.error(f"Error obteniendo conversación en {execution_time:.2f}ms: {e}")
+            raise
+
+    def _add_to_conversation_cache(self, usuario_id: str, conversacion: Conversacion):
+        """Agrega conversación al cache con límite de tamaño"""
+        if len(self._conversation_cache) >= self._max_cache_size:
+            # Remover el más antiguo (FIFO simple)
+            oldest_key = next(iter(self._conversation_cache))
+            del self._conversation_cache[oldest_key]
+        
+        self._conversation_cache[usuario_id] = conversacion
 
     def agregar_mensaje_usuario(self, usuario_id: str, texto: str) -> Mensaje:
         """
         Agrega un mensaje del usuario a la conversación.
+        OPTIMIZADO: Medición de tiempo y validación de entrada.
 
         Args:
             usuario_id: ID del usuario
@@ -127,25 +165,44 @@ class ChatbotService:
         Returns:
             Mensaje creado
         """
-        conversacion = self.obtener_o_crear_conversacion(usuario_id)
+        start_time = time.perf_counter()
+        
+        try:
+            # Validación de entrada
+            if not texto or not texto.strip():
+                raise ValueError("El texto del mensaje no puede estar vacío")
 
-        # Crear mensaje
-        mensaje = Mensaje(role="user", content=texto)
+            conversacion = self.obtener_o_crear_conversacion(usuario_id)
 
-        # Agregar a la conversación
-        conversacion.agregar_mensaje(mensaje)
+            # Crear mensaje
+            mensaje = Mensaje(role="user", content=texto.strip())
 
-        # Limitar historial para evitar tokens excesivos
-        conversacion.limitar_historial(max_mensajes=20)
+            # Agregar a la conversación
+            conversacion.agregar_mensaje(mensaje)
 
-        # Guardar la conversación actualizada
-        self.repository.guardar_conversacion(conversacion)
+            # OPTIMIZACIÓN: Limitar historial para evitar tokens excesivos
+            conversacion.limitar_historial(max_mensajes=20)
 
-        return mensaje
+            # Guardar la conversación actualizada
+            self.repository.guardar_conversacion(conversacion)
+            
+            # Actualizar cache
+            self._conversation_cache[usuario_id] = conversacion
+
+            execution_time = (time.perf_counter() - start_time) * 1000
+            logger.debug(f"Mensaje usuario agregado en {execution_time:.2f}ms")
+            
+            return mensaje
+            
+        except Exception as e:
+            execution_time = (time.perf_counter() - start_time) * 1000
+            logger.error(f"Error agregando mensaje usuario en {execution_time:.2f}ms: {e}")
+            raise
 
     def agregar_mensaje_asistente(self, usuario_id: str, texto: str) -> Mensaje:
         """
         Agrega un mensaje del asistente a la conversación.
+        OPTIMIZADO: Medición de tiempo y cache actualizado.
 
         Args:
             usuario_id: ID del usuario
@@ -154,71 +211,147 @@ class ChatbotService:
         Returns:
             Mensaje creado
         """
-        conversacion = self.obtener_o_crear_conversacion(usuario_id)
-
-        # Crear mensaje
-        mensaje = Mensaje(role="assistant", content=texto)
-
-        # Agregar a la conversación
-        conversacion.agregar_mensaje(mensaje)
-
-        # Guardar la conversación actualizada
-        self.repository.guardar_conversacion(conversacion)
-
-        return mensaje
-    
-    # Nuevo método en ChatbotService
-    def obtener_resumen_conversacion(self, usuario_id: str) -> str:
-        """Genera un resumen de la conversación para mantener contexto."""
-        conversacion = self.obtener_o_crear_conversacion(usuario_id)
-        # Si hay pocos mensajes, no es necesario resumir
-        if len(conversacion.mensajes) < 15:
-            return ""
+        start_time = time.perf_counter()
         
-        # Solicitar un resumen a la IA
-        mensajes_para_resumir = conversacion.mensajes[-15:]  # Últimos 15 mensajes
-        mensajes_formateados = [f"{m.role}: {m.content}" for m in mensajes_para_resumir]
-        
-        instruccion = "Resume brevemente los siguientes intercambios de la conversación manteniendo los puntos clave:"
-        contenido = "\n".join(mensajes_formateados)
-        
-        mensajes_resumen = [
-            {"role": "system", "content": instruccion},
-            {"role": "user", "content": contenido}
-        ]
-        
-        respuesta = self.ai_provider.generar_respuesta(mensajes_resumen)
-        return respuesta
+        try:
+            conversacion = self.obtener_o_crear_conversacion(usuario_id)
 
-    def obtener_historial_mensajes(self, usuario_id: str) -> List[Dict[str, str]]:
+            # Crear mensaje
+            mensaje = Mensaje(role="assistant", content=texto)
+
+            # Agregar a la conversación
+            conversacion.agregar_mensaje(mensaje)
+
+            # Guardar la conversación actualizada
+            self.repository.guardar_conversacion(conversacion)
+            
+            # Actualizar cache
+            self._conversation_cache[usuario_id] = conversacion
+
+            execution_time = (time.perf_counter() - start_time) * 1000
+            logger.debug(f"Mensaje asistente agregado en {execution_time:.2f}ms")
+            
+            return mensaje
+            
+        except Exception as e:
+            execution_time = (time.perf_counter() - start_time) * 1000
+            logger.error(f"Error agregando mensaje asistente en {execution_time:.2f}ms: {e}")
+            raise
+
+    def obtener_historial_mensajes(self, usuario_id: str, limit: int = 20) -> List[Dict[str, str]]:
         """
-        Obtiene el historial de mensajes de la conversación en formato para OpenAI.
-
+        MÉTODO OPTIMIZADO: Obtiene el historial limitado directamente.
+        
         Args:
             usuario_id: ID del usuario
+            limit: Límite de mensajes a obtener
 
         Returns:
             Lista de mensajes en formato para la API de OpenAI
         """
-        conversacion = self.obtener_o_crear_conversacion(usuario_id)
-        return conversacion.obtener_historial()
+        start_time = time.perf_counter()
+        
+        try:
+            # Intentar usar el método optimizado del repositorio si está disponible
+            if hasattr(self.repository, 'obtener_historial_limitado'):
+                historial = self.repository.obtener_historial_limitado(usuario_id, limit)
+                execution_time = (time.perf_counter() - start_time) * 1000
+                logger.debug(f"Historial limitado obtenido en {execution_time:.2f}ms")
+                return historial
+            
+            # Fallback al método original con límite en memoria
+            conversacion = self.obtener_o_crear_conversacion(usuario_id)
+            historial_completo = conversacion.obtener_historial()
+            
+            # Aplicar límite manteniendo mensaje de sistema
+            if len(historial_completo) > limit:
+                sistema_msgs = [m for m in historial_completo if m.get('role') == 'system']
+                otros_msgs = [m for m in historial_completo if m.get('role') != 'system']
+                historial_limitado = sistema_msgs + otros_msgs[-(limit - len(sistema_msgs)):]
+            else:
+                historial_limitado = historial_completo
+            
+            execution_time = (time.perf_counter() - start_time) * 1000
+            logger.debug(f"Historial fallback obtenido en {execution_time:.2f}ms")
+            
+            return historial_limitado
+            
+        except Exception as e:
+            execution_time = (time.perf_counter() - start_time) * 1000
+            logger.error(f"Error obteniendo historial en {execution_time:.2f}ms: {e}")
+            # Retornar historial mínimo en caso de error
+            return [{"role": "system", "content": "Eres un asistente bancario virtual."}]
+
+    def obtener_resumen_conversacion(self, usuario_id: str) -> str:
+        """
+        Genera un resumen de la conversación para mantener contexto.
+        OPTIMIZADO: Con medición de tiempo.
+        """
+        start_time = time.perf_counter()
+        
+        try:
+            conversacion = self.obtener_o_crear_conversacion(usuario_id)
+            
+            # Si hay pocos mensajes, no es necesario resumir
+            if len(conversacion.mensajes) < 15:
+                return ""
+            
+            # Solicitar un resumen a la IA
+            mensajes_para_resumir = conversacion.mensajes[-15:]  # Últimos 15 mensajes
+            mensajes_formateados = [f"{m.role}: {m.content}" for m in mensajes_para_resumir]
+            
+            instruccion = "Resume brevemente los siguientes intercambios de la conversación manteniendo los puntos clave:"
+            contenido = "\n".join(mensajes_formateados)
+            
+            mensajes_resumen = [
+                {"role": "system", "content": instruccion},
+                {"role": "user", "content": contenido}
+            ]
+            
+            if self.ai_provider:
+                respuesta = self.ai_provider.generar_respuesta(mensajes_resumen)
+                execution_time = (time.perf_counter() - start_time) * 1000
+                logger.debug(f"Resumen generado en {execution_time:.2f}ms")
+                return respuesta
+            else:
+                logger.warning("AI provider no disponible para generar resumen")
+                return ""
+                
+        except Exception as e:
+            execution_time = (time.perf_counter() - start_time) * 1000
+            logger.error(f"Error generando resumen en {execution_time:.2f}ms: {e}")
+            return ""
 
     def actualizar_datos_usuario(self, usuario_id: str, datos: Dict) -> None:
         """
         Actualiza los datos del usuario.
+        OPTIMIZADO: Con medición de tiempo.
 
         Args:
             usuario_id: ID del usuario
             datos: Datos a actualizar
         """
-        usuario = self.repository.obtener_usuario(usuario_id)
-        if usuario:
-            usuario.datos.update(datos)
-            self.repository.guardar_usuario(usuario)
+        start_time = time.perf_counter()
+        
+        try:
+            usuario = self.repository.obtener_usuario(usuario_id)
+            if usuario:
+                usuario.datos.update(datos)
+                self.repository.guardar_usuario(usuario)
+                
+                execution_time = (time.perf_counter() - start_time) * 1000
+                logger.debug(f"Datos usuario actualizados en {execution_time:.2f}ms")
+            else:
+                logger.warning(f"Usuario {usuario_id} no encontrado para actualizar datos")
+                
+        except Exception as e:
+            execution_time = (time.perf_counter() - start_time) * 1000
+            logger.error(f"Error actualizando datos usuario en {execution_time:.2f}ms: {e}")
 
     def analizar_sentimiento_mensaje(self, texto: str) -> AnalisisSentimiento:
         """
         Analiza el sentimiento de un mensaje.
+        OPTIMIZADO: Con cache inteligente y medición de tiempo.
 
         Args:
             texto: Texto a analizar
@@ -226,11 +359,51 @@ class ChatbotService:
         Returns:
             Análisis de sentimiento
         """
-        return self.sentimiento_analyzer.execute(texto)
-    
+        start_time = time.perf_counter()
+        
+        try:
+            # Crear clave de cache
+            cache_key = hash(texto.strip().lower())
+            
+            # Verificar cache
+            if cache_key in self._sentiment_cache:
+                execution_time = (time.perf_counter() - start_time) * 1000
+                logger.debug(f"Sentimiento obtenido del cache en {execution_time:.2f}ms")
+                return self._sentiment_cache[cache_key]
+            
+            # Analizar sentimiento
+            resultado = self.sentimiento_analyzer.execute(texto)
+            
+            # Agregar al cache con límite
+            if len(self._sentiment_cache) >= self._max_cache_size:
+                # Remover elementos antiguos (FIFO simple)
+                oldest_key = next(iter(self._sentiment_cache))
+                del self._sentiment_cache[oldest_key]
+            
+            self._sentiment_cache[cache_key] = resultado
+            
+            execution_time = (time.perf_counter() - start_time) * 1000
+            logger.debug(f"Sentimiento analizado en {execution_time:.2f}ms")
+            
+            return resultado
+            
+        except Exception as e:
+            execution_time = (time.perf_counter() - start_time) * 1000
+            logger.error(f"Error analizando sentimiento en {execution_time:.2f}ms: {e}")
+            
+            # Retornar análisis por defecto en caso de error
+            class FallbackSentiment:
+                sentimiento = "neutral"
+                confianza = 0.5
+                emociones = []
+                entidades = {}
+            
+            return FallbackSentiment()
+
     def check_for_escalation(self, mensaje_usuario: str, usuario_id: str) -> bool:
         """
         Verifica si es necesario escalar la conversación a un humano.
+        OPTIMIZADO: Con medición de tiempo y mejor manejo de errores.
         
         Args:
             mensaje_usuario: Texto del mensaje del usuario
@@ -239,33 +412,45 @@ class ChatbotService:
         Returns:
             True si es necesario escalar, False en caso contrario
         """
-        # Si no hay servicio de escalación, no se puede escalar
-        if not self.escalation_service:
-            logger.warning("Escalation service not initialized, cannot escalate")
+        start_time = time.perf_counter()
+        
+        try:
+            # Si no hay servicio de escalación, no se puede escalar
+            if not self.escalation_service:
+                logger.debug("Escalation service no disponible")
+                return False
+            
+            # Obtener conversación activa
+            conversacion = self.obtener_o_crear_conversacion(usuario_id)
+            
+            # Verificar si debe escalar
+            should_escalate, reason = self.escalation_service.check_for_escalation(mensaje_usuario, conversacion)
+            
+            # Si debe escalar, crear ticket
+            if should_escalate and reason:
+                # Obtener usuario
+                usuario = self.repository.obtener_usuario(usuario_id)
+                
+                # Crear ticket
+                ticket = self.escalation_service.create_ticket(conversacion, usuario, reason)
+                
+                execution_time = (time.perf_counter() - start_time) * 1000
+                logger.info(f"Conversación escalada en {execution_time:.2f}ms. Ticket creado: {ticket.id}")
+                return True
+            
+            execution_time = (time.perf_counter() - start_time) * 1000
+            logger.debug(f"Verificación escalación completada en {execution_time:.2f}ms")
             return False
-        
-        # Obtener conversación activa
-        conversacion = self.obtener_o_crear_conversacion(usuario_id)
-        
-        # Verificar si debe escalar
-        should_escalate, reason = self.escalation_service.check_for_escalation(mensaje_usuario, conversacion)
-        
-        # Si debe escalar, crear ticket
-        if should_escalate and reason:
-            # Obtener usuario
-            usuario = self.repository.obtener_usuario(usuario_id)
             
-            # Crear ticket
-            ticket = self.escalation_service.create_ticket(conversacion, usuario, reason)
-            
-            logger.info(f"Conversación escalada a humano. Ticket creado: {ticket.id}")
-            return True
-        
-        return False
-    
+        except Exception as e:
+            execution_time = (time.perf_counter() - start_time) * 1000
+            logger.error(f"Error verificando escalación en {execution_time:.2f}ms: {e}")
+            return False
+
     def esta_escalada(self, usuario_id: str) -> bool:
         """
         Verifica si la conversación ya ha sido escalada a un humano.
+        OPTIMIZADO: Con medición de tiempo.
         
         Args:
             usuario_id: ID del usuario
@@ -273,20 +458,62 @@ class ChatbotService:
         Returns:
             True si ya está escalada, False en caso contrario
         """
-        # Si no hay servicio de escalación, no está escalada
-        if not self.escalation_service:
-            return False
+        start_time = time.perf_counter()
         
-        # Buscar tickets activos para este usuario
-        if hasattr(self.escalation_service.repository, 'obtener_tickets_por_usuario'):
-            tickets = self.escalation_service.repository.obtener_tickets_por_usuario(usuario_id)
+        try:
+            # Si no hay servicio de escalación, no está escalada
+            if not self.escalation_service:
+                return False
             
-            # Verificar si hay algún ticket activo (pendiente, asignado o activo)
-            for ticket in tickets:
-                if ticket.estado in [TicketStatus.PENDING, TicketStatus.ASSIGNED, TicketStatus.ACTIVE]:
-                    return True
-        
-        return False
+            # Buscar tickets activos para este usuario
+            if hasattr(self.escalation_service.repository, 'obtener_tickets_por_usuario'):
+                tickets = self.escalation_service.repository.obtener_tickets_por_usuario(usuario_id)
+                
+                # Verificar si hay algún ticket activo (pendiente, asignado o activo)
+                for ticket in tickets:
+                    if ticket.estado in [TicketStatus.PENDING, TicketStatus.ASSIGNED, TicketStatus.ACTIVE]:
+                        execution_time = (time.perf_counter() - start_time) * 1000
+                        logger.debug(f"Estado escalación verificado en {execution_time:.2f}ms")
+                        return True
+            
+            execution_time = (time.perf_counter() - start_time) * 1000
+            logger.debug(f"Estado escalación verificado en {execution_time:.2f}ms")
+            return False
+            
+        except Exception as e:
+            execution_time = (time.perf_counter() - start_time) * 1000
+            logger.error(f"Error verificando estado escalación en {execution_time:.2f}ms: {e}")
+            return False
 
-      
-    
+    def get_performance_stats(self) -> Dict[str, any]:
+        """
+        Obtiene estadísticas de rendimiento del servicio.
+        
+        Returns:
+            Diccionario con estadísticas de rendimiento
+        """
+        return {
+            'cache_sizes': {
+                'sentiment_cache': len(self._sentiment_cache),
+                'conversation_cache': len(self._conversation_cache)
+            },
+            'max_cache_size': self._max_cache_size,
+            'escalation_service_available': self.escalation_service is not None,
+            'ai_provider_available': self.ai_provider is not None
+        }
+
+    def clear_caches(self):
+        """
+        Limpia todos los caches para liberar memoria.
+        """
+        start_time = time.perf_counter()
+        
+        sentiment_cache_size = len(self._sentiment_cache)
+        conversation_cache_size = len(self._conversation_cache)
+        
+        self._sentiment_cache.clear()
+        self._conversation_cache.clear()
+        
+        execution_time = (time.perf_counter() - start_time) * 1000
+        logger.info(f"Caches limpiados en {execution_time:.2f}ms. "
+                   f"Sentimiento: {sentiment_cache_size}, Conversaciones: {conversation_cache_size}")
