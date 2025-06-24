@@ -1,268 +1,124 @@
-# main.py
-import logging
-import time
-import asyncio
-from typing import Optional
-from dotenv import load_dotenv  # ← AGREGAR ESTA LÍNEA
+# app.py o main.py - Punto de entrada principal de la aplicación
+
 import os
+import logging
+from dotenv import load_dotenv
 
-# Cargar variables de entorno ANTES de importar las configuraciones
-load_dotenv()  # ← AGREGAR ESTA LÍNEA
+# Aplicar monkey_patch de eventlet ANTES de cualquier otra importación
+import eventlet
+eventlet.monkey_patch()
 
-from bot_siacasa.config.config import OptimizedConfig, EnvironmentConfig, get_optimized_config
-from bot_siacasa.domain.services.chatbot_service import ChatbotService
-from bot_siacasa.domain.services.response_cache_service import get_cache_service
-from bot_siacasa.infrastructure.ai.openai_provider import OpenAIProvider
-from bot_siacasa.infrastructure.repositories.memory_repository import MemoryRepository
-from bot_siacasa.application.use_cases.procesar_mensaje_use_case import ProcesarMensajeUseCase
-from bot_siacasa.application.use_cases.analizar_sentimiento_use_case import AnalizarSentimientoUseCase
-
-# Configurar logging optimizado
+# Configurar logging
 logging.basicConfig(
-    level=getattr(logging, EnvironmentConfig.LOG_LEVEL),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('chatbot.log')
+    ]
 )
+
 logger = logging.getLogger(__name__)
 
+# Cargar variables de entorno
+load_dotenv()
 
-class OptimizedChatbotApp:
-    """
-    Aplicación principal del chatbot optimizada para máximo rendimiento.
-    """
-    
-    def __init__(self):
-        """Inicializa la aplicación con configuración optimizada."""
-        self.config = get_optimized_config()
-        self.cache_service = get_cache_service()
-        
-        # Componentes principales
-        self.repository = None
-        self.ai_provider = None
-        self.chatbot_service = None
-        self.procesar_mensaje_use_case = None
-        
-        # Métricas de rendimiento
-        self.start_time = time.time()
-        self.total_requests = 0
-        self.total_response_time = 0.0
-        
-        logger.info("🚀 Inicializando OptimizedChatbotApp...")
-    
-    def initialize(self) -> None:
-        """Inicializa todos los componentes de la aplicación."""
-        init_start = time.perf_counter()
-        
-        try:
-            # 1. Inicializar repositorio
-            self.repository = MemoryRepository()
-            logger.info("✅ Repository inicializado")
-            
-            # 2. Inicializar proveedor de IA con configuración optimizada
-            if not EnvironmentConfig.OPENAI_API_KEY:
-                raise ValueError("OPENAI_API_KEY no configurada")
-            
-            self.ai_provider = OpenAIProvider(
-                api_key=EnvironmentConfig.OPENAI_API_KEY,
-                model=self.config["openai"]["model"]
-            )
-            # Aplicar configuración optimizada
-            self.ai_provider.update_config(**self.config["openai"])
-            logger.info(f"✅ OpenAI Provider inicializado con modelo {self.config['openai']['model']}")
-            
-            # 3. Inicializar analizador de sentimientos
-            sentiment_analyzer = AnalizarSentimientoUseCase(self.ai_provider)
-            logger.info("✅ Sentiment Analyzer inicializado")
-            
-            # 4. Inicializar servicio principal del chatbot
-            self.chatbot_service = ChatbotService(
-                repository=self.repository,
-                sentimiento_analyzer=sentiment_analyzer,
-                ai_provider=self.ai_provider,
-                bank_config={
-                    "bank_name": "SIACASA Bank",
-                    "style": "professional"
-                }
-            )
-            logger.info("✅ ChatbotService inicializado")
-            
-            # 5. Inicializar caso de uso principal
-            self.procesar_mensaje_use_case = ProcesarMensajeUseCase(
-                chatbot_service=self.chatbot_service
-            )
-            logger.info("✅ ProcesarMensajeUseCase inicializado")
-            
-            init_time = (time.perf_counter() - init_start) * 1000
-            logger.info(f"🎉 Aplicación inicializada completamente en {init_time:.2f}ms")
-            
-        except Exception as e:
-            init_time = (time.perf_counter() - init_start) * 1000
-            logger.error(f"❌ Error inicializando aplicación ({init_time:.2f}ms): {e}", exc_info=True)
-            raise
-    
-    def process_message(self, user_id: str, message: str) -> str:
-        """
-        Procesa un mensaje de usuario de forma optimizada.
-        
-        Args:
-            user_id: ID del usuario
-            message: Mensaje del usuario
-            
-        Returns:
-            Respuesta del chatbot
-        """
-        request_start = time.perf_counter()
-        self.total_requests += 1
-        
-        try:
-            # Validación rápida
-            if not message or not message.strip():
-                return "Por favor, escribe un mensaje para poder ayudarte."
-            
-            if not user_id:
-                user_id = f"anonymous_{int(time.time())}"
-            
-            # Verificar cache de respuestas primero
-            cache_key = self.cache_service.generate_key(user_id, message)
-            cached_response = self.cache_service.get_response(cache_key)
-            
-            if cached_response:
-                response_time = (time.perf_counter() - request_start) * 1000
-                logger.info(f"⚡ Respuesta del cache en {response_time:.2f}ms")
-                self._update_metrics(response_time)
-                return cached_response
-            
-            # Procesar con el caso de uso
-            response = self.procesar_mensaje_use_case.execute(
-                mensaje_usuario=message,
-                usuario_id=user_id
-            )
-            
-            # Cachear la respuesta
-            category = self.cache_service.categorize_message(message)
-            self.cache_service.set_response(cache_key, response, category)
-            
-            # Métricas
-            response_time = (time.perf_counter() - request_start) * 1000
-            self._update_metrics(response_time)
-            
-            logger.info(f"✅ Mensaje procesado en {response_time:.2f}ms (total: {self.total_requests})")
-            
-            return response
-            
-        except Exception as e:
-            response_time = (time.perf_counter() - request_start) * 1000
-            logger.error(f"❌ Error procesando mensaje ({response_time:.2f}ms): {e}", exc_info=True)
-            return "Lo siento, estoy experimentando problemas técnicos. Por favor, intenta de nuevo."
-    
-    async def process_message_async(self, user_id: str, message: str) -> str:
-        """
-        Versión asíncrona del procesamiento de mensajes.
-        """
-        # Para casos que requieren procesamiento asíncrono
-        return await asyncio.get_event_loop().run_in_executor(
-            None, self.process_message, user_id, message
-        )
-    
-    def get_performance_stats(self) -> dict:
-        """Retorna estadísticas de rendimiento."""
-        uptime = time.time() - self.start_time
-        avg_response_time = (self.total_response_time / max(self.total_requests, 1)) * 1000
-        
-        return {
-            "uptime_seconds": round(uptime, 2),
-            "total_requests": self.total_requests,
-            "avg_response_time_ms": round(avg_response_time, 2),
-            "requests_per_second": round(self.total_requests / max(uptime, 1), 2),
-            "cache_stats": self.cache_service.get_stats(),
-            "ai_provider_stats": self.ai_provider.get_cache_stats() if hasattr(self.ai_provider, 'get_cache_stats') else {}
-        }
-    
-    def cleanup_caches(self) -> None:
-        """Limpia los caches para liberar memoria."""
-        self.cache_service.cleanup_expired()
-        if hasattr(self.ai_provider, 'clear_cache'):
-            self.ai_provider.clear_cache()
-        logger.info("🧹 Caches limpiados")
-    
-    def _update_metrics(self, response_time_ms: float) -> None:
-        """Actualiza métricas internas."""
-        self.total_response_time += response_time_ms / 1000  # Convertir a segundos
-    
-    def health_check(self) -> dict:
-        """Verifica el estado de la aplicación."""
-        try:
-            # Test básico de componentes
-            test_response = self.process_message("health_check", "hola")
-            
-            return {
-                "status": "healthy",
-                "timestamp": time.time(),
-                "components": {
-                    "repository": "ok",
-                    "ai_provider": "ok",
-                    "chatbot_service": "ok",
-                    "cache_service": "ok"
-                },
-                "test_response_length": len(test_response),
-                "performance": self.get_performance_stats()
-            }
-        except Exception as e:
-            return {
-                "status": "unhealthy",
-                "error": str(e),
-                "timestamp": time.time()
-            }
+# Importar componentes necesarios
+from bot_siacasa.domain.services.chatbot_service import ChatbotService
+from bot_siacasa.infrastructure.repositories.memory_repository import MemoryRepository
 
-
-# Instancia global de la aplicación
-app_instance: Optional[OptimizedChatbotApp] = None
-
-
-def get_app() -> OptimizedChatbotApp:
-    """
-    Retorna la instancia global de la aplicación (singleton).
-    """
-    global app_instance
-    if app_instance is None:
-        app_instance = OptimizedChatbotApp()
-        app_instance.initialize()
-    return app_instance
-
+from bot_siacasa.infrastructure.ai.openai_provider import OpenAIProvider
+from bot_siacasa.application.use_cases.analizar_sentimiento_use_case import AnalizarSentimientoUseCase
+from bot_siacasa.application.use_cases.procesar_mensaje_use_case import ProcesarMensajeUseCase
+from bot_siacasa.domain.banks_config import BANK_CONFIGS
+from bot_siacasa.interfaces.web.web_app import WebApp
+from bot_siacasa.domain.entities.analisis_sentimiento import AnalisisSentimiento
+from bot_siacasa.infrastructure.db.support_repository import SupportRepository
+from bot_siacasa.infrastructure.websocket.socketio_server import init_socketio_server
+from bot_siacasa.infrastructure.repositories.postgresql_repository import PostgreSQLRepository
+from bot_siacasa.infrastructure.db.neondb_connector import NeonDBConnector
 
 def main():
-    """Función principal para ejecutar la aplicación en modo CLI."""
-    print("🚀 Iniciando SIACASA Chatbot Optimizado...")
-    
+    """Función principal para iniciar la aplicación."""
     try:
-        # Inicializar aplicación
-        app = get_app()
+        logger.info("Iniciando aplicación SIACASA")
         
-        # Mostrar estadísticas iniciales
-        stats = app.get_performance_stats()
-        logger.info(f"📊 App inicializada - Uptime: {stats['uptime_seconds']}s")
+        # Obtener configuración
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            logger.error("No se encontró la API key de OpenAI. Configura la variable de entorno OPENAI_API_KEY.")
+            return
         
-        print("✅ Aplicación lista. Presiona Ctrl+C para detener.")
+        # Configuración del banco (default: Banco de la Nación)
+        bank_code = os.getenv("BANK_CODE", "bn")
+        bank_config = BANK_CONFIGS.get(bank_code)
         
-        # Mantener la aplicación viva con un bucle simple
-        import signal
-        import sys
+        logger.info(f"Usando configuración para banco: {bank_config['bank_name']}")
         
-        def signal_handler(sig, frame):
-            logger.info("🛑 Cerrando aplicación...")
-            sys.exit(0)
+        # Crear el repositorio
+        repository = PostgreSQLRepository()
+        logger.info("Repositorio en memoria inicializado")
         
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
+        # Inicializar el conector de base de datos
+        db_connector = NeonDBConnector(
+            host=os.getenv("NEONDB_HOST"),
+            database=os.getenv("NEONDB_DATABASE"),
+            user=os.getenv("NEONDB_USER"),
+            password=os.getenv("NEONDB_PASSWORD")
+        )
         
-        # Loop infinito hasta recibir señal
-        while True:
-            time.sleep(1)
-
+        # Inicializar repositorio de soporte
+        support_repository = SupportRepository(db_connector)
+        logger.info("Repositorio de soporte inicializado")
+        
+        # Crear el proveedor de IA de OpenAI
+        ai_provider = OpenAIProvider(
+            api_key=openai_api_key,
+            model=os.getenv("OPENAI_MODEL", "gpt-4o")
+        )
+        logger.info(f"Proveedor de OpenAI inicializado con modelo {ai_provider.model}")
+        
+        # Crear el analizador de sentimientos
+        sentimiento_analyzer = AnalizarSentimientoUseCase(ai_provider)
+        logger.info("Analizador de sentimientos inicializado")
+        
+        # Crear el servicio de chatbot
+        chatbot_service = ChatbotService(
+            repository=repository,
+            sentimiento_analyzer=sentimiento_analyzer,
+            ai_provider=ai_provider,  # IMPORTANTE: pasar el proveedor de IA
+            bank_config=bank_config,
+            support_repository=support_repository  # Añadir repositorio de soporte
+        )
+        logger.info("Servicio de chatbot inicializado")
+        
+        # Crear el caso de uso para procesar mensajes
+        procesar_mensaje_use_case = ProcesarMensajeUseCase(
+            chatbot_service=chatbot_service,
+            ai_provider=ai_provider
+        )
+        logger.info("Caso de uso para procesar mensajes inicializado")
+        
+        # Crear la aplicación web
+        app = WebApp(procesar_mensaje_use_case=procesar_mensaje_use_case, chatbot_service=chatbot_service)
+        logger.info("Aplicación web inicializada")
+        
+        # Inicializar el servidor WebSocket/Socket.IO
+        socketio_server = init_socketio_server(app.app, support_repository)
+        logger.info(f"Servidor Socket.IO inicializado")
+        
+        # Asegurar que el servidor escucha en todas las interfaces
+        host = os.getenv("HOST", "0.0.0.0")
+        port = int(os.getenv("PORT", "3200"))
+        debug = os.getenv("DEBUG", "False").lower() == "true"
+        
+        logger.info(f"Iniciando servidor en {host}:{port} (debug={debug})")
+        
+        # Usar gevent para la ejecución con Socket.IO
+        socketio_server.run(app.app, host=host, port=port, debug=debug)
+        
     except Exception as e:
-        logger.error(f"Error fatal: {e}", exc_info=True)
-        print(f"❌ Error fatal: {e}")
-        exit(1)
-
+        logger.error(f"Error al iniciar la aplicación: {e}", exc_info=True)
 
 if __name__ == "__main__":
     main()
