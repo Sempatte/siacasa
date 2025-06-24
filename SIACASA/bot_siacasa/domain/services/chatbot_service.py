@@ -25,6 +25,7 @@ class ChatbotService:
     """
     Servicio principal del chatbot que implementa la lógica de negocio.
     VERSIÓN OPTIMIZADA con medición de tiempo precisa y cache.
+    ARREGLADO: Mantiene contexto completo de la conversación.
     """
 
     def __init__(
@@ -237,6 +238,76 @@ class ChatbotService:
             execution_time = (time.perf_counter() - start_time) * 1000
             logger.error(f"Error agregando mensaje asistente en {execution_time:.2f}ms: {e}")
             raise
+
+    def procesar_mensaje(self, usuario_id: str, texto: str, info_usuario: Dict = None) -> str:
+        """
+        🔥 MÉTODO PRINCIPAL: Procesa un mensaje del usuario manteniendo el contexto COMPLETO.
+        CRÍTICO: Este método asegura que se mantenga el historial de la conversación.
+        
+        Args:
+            usuario_id: ID del usuario
+            texto: Texto del mensaje del usuario
+            info_usuario: Información adicional del usuario
+            
+        Returns:
+            Respuesta generada por la IA
+        """
+        start_time = time.perf_counter()
+        
+        try:
+            # 1. Obtener conversación existente (esto preserva el historial)
+            conversacion = self.obtener_o_crear_conversacion(usuario_id)
+            
+            # 2. DEBUG: Verificar que tenemos mensajes previos
+            logger.info(f"🔍 CONVERSACIÓN {usuario_id}: {len(conversacion.mensajes)} mensajes existentes")
+            for i, msg in enumerate(conversacion.mensajes[-3:]):  # Log últimos 3 mensajes
+                content_preview = msg.content[:50] + "..." if len(msg.content) > 50 else msg.content
+                logger.info(f"  📝 Mensaje {i}: [{msg.role}] {content_preview}")
+            
+            # 3. Agregar mensaje del usuario a la conversación
+            mensaje_usuario = self.agregar_mensaje_usuario(usuario_id, texto)
+            
+            # 4. CRÍTICO: Obtener historial COMPLETO incluyendo mensajes anteriores
+            historial_completo = conversacion.obtener_historial()
+            
+            # 5. Verificar que el historial contiene contexto
+            if len(historial_completo) < 2:
+                logger.warning(f"⚠️ HISTORIAL MUY CORTO para {usuario_id}: {len(historial_completo)} mensajes")
+            else:
+                logger.info(f"✅ Enviando {len(historial_completo)} mensajes a la IA para mantener contexto")
+            
+            # 6. Generar respuesta con TODO el historial (esto mantiene el contexto)
+            if not self.ai_provider:
+                logger.error("❌ AI provider no disponible")
+                return "Lo siento, estoy experimentando problemas técnicos."
+            
+            # 7. Llamar a la IA con el historial completo
+            respuesta = self.ai_provider.generar_respuesta(historial_completo)
+            
+            # 8. Guardar respuesta del asistente
+            mensaje_respuesta = Mensaje(
+                id=str(uuid.uuid4()),
+                role="assistant", 
+                content=respuesta,
+                timestamp=datetime.now()
+            )
+            conversacion.agregar_mensaje(mensaje_respuesta)
+            
+            # 9. CRÍTICO: Guardar la conversación actualizada
+            self.repository.guardar_conversacion(conversacion)
+            
+            # 10. Actualizar cache para próximas consultas
+            self._conversation_cache[usuario_id] = conversacion
+            
+            execution_time = (time.perf_counter() - start_time) * 1000
+            logger.info(f"✅ Mensaje procesado en {execution_time:.2f}ms con {len(historial_completo)} mensajes de contexto")
+            
+            return respuesta
+            
+        except Exception as e:
+            execution_time = (time.perf_counter() - start_time) * 1000
+            logger.error(f"❌ Error procesando mensaje en {execution_time:.2f}ms: {e}", exc_info=True)
+            return "Disculpa, ocurrió un error al procesar tu mensaje. ¿Puedes intentarlo de nuevo?"
 
     def obtener_historial_mensajes(self, usuario_id: str, limit: int = 20) -> List[Dict[str, str]]:
         """
@@ -517,3 +588,30 @@ class ChatbotService:
         execution_time = (time.perf_counter() - start_time) * 1000
         logger.info(f"Caches limpiados en {execution_time:.2f}ms. "
                    f"Sentimiento: {sentiment_cache_size}, Conversaciones: {conversation_cache_size}")
+
+    def reiniciar_conversacion(self, usuario_id: str) -> bool:
+        """
+        Reinicia la conversación de un usuario.
+        
+        Args:
+            usuario_id: ID del usuario
+            
+        Returns:
+            True si se reinició correctamente
+        """
+        try:
+            # Limpiar del cache
+            if usuario_id in self._conversation_cache:
+                del self._conversation_cache[usuario_id]
+            
+            # Si hay conversación activa, marcarla como inactiva
+            conversacion = self.repository.obtener_conversacion_activa(usuario_id)
+            if conversacion:
+                # Aquí podrías implementar lógica para archivar la conversación
+                logger.info(f"Conversación reiniciada para usuario {usuario_id}")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error reiniciando conversación para {usuario_id}: {e}")
+            return False

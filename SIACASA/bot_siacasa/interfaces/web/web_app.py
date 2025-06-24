@@ -123,6 +123,33 @@ class WebApp:
                     'error': str(e)
                 }), 500
         
+        # Endpoint para debug del historial
+        @self.app.route('/api/debug/<usuario_id>')
+        def debug_conversacion(usuario_id):
+            """Debug del historial de conversación"""
+            try:
+                conversacion = self.chatbot_service.repository.obtener_conversacion_activa(usuario_id)
+                if conversacion:
+                    mensajes = []
+                    for i, msg in enumerate(conversacion.mensajes):
+                        mensajes.append({
+                            'index': i,
+                            'role': msg.role,
+                            'content': msg.content,
+                            'timestamp': str(msg.timestamp) if hasattr(msg, 'timestamp') else 'N/A'
+                        })
+                    return jsonify({
+                        'usuario_id': usuario_id,
+                        'conversacion_id': conversacion.id,
+                        'total_mensajes': len(conversacion.mensajes),
+                        'mensajes': mensajes,
+                        'cache_status': usuario_id in self.chatbot_service._conversation_cache
+                    })
+                else:
+                    return jsonify({'error': 'No hay conversación activa'})
+            except Exception as e:
+                return jsonify({'error': str(e)})
+        
         # API para procesar mensajes
         @self.app.route('/api/mensaje', methods=['POST'])
         def procesar_mensaje():
