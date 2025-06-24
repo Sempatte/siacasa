@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 
 class ProcesarMensajeUseCase:
     """
-    Caso de uso principal para procesar mensajes del usuario con métricas integradas.
-    Versión corregida y optimizada.
+    Caso de uso principal para procesar mensajes del usuario.
+    VERSIÓN SIMPLIFICADA: Usa directamente el método procesar_mensaje del ChatbotService.
     """
 
     def __init__(self, chatbot_service, ai_provider: IAProviderInterface):
@@ -29,12 +29,14 @@ class ProcesarMensajeUseCase:
         self.ai_provider = ai_provider
         self.metrics_collector = metrics_collector
 
+        # Asegurar que el chatbot_service tenga el ai_provider
         if hasattr(chatbot_service, 'ai_provider') and chatbot_service.ai_provider is None:
             chatbot_service.ai_provider = ai_provider
 
     def execute(self, mensaje_usuario: str, usuario_id: Optional[str] = None, info_usuario: Optional[Dict] = None) -> str:
         """
         Procesa un mensaje del usuario y genera una respuesta.
+        SIMPLIFICADO: Delega toda la lógica al ChatbotService.
 
         Args:
             mensaje_usuario: Texto del mensaje del usuario
@@ -44,178 +46,95 @@ class ProcesarMensajeUseCase:
         Returns:
             Texto de la respuesta generada
         """
-        # CORRECCIÓN: Usar time.perf_counter() para medición precisa
         total_start_time = time.perf_counter()
-        session_id = None
 
         try:
-            # Validación de entrada
+            # 1. Validación básica
             if not mensaje_usuario or not mensaje_usuario.strip():
                 return "Por favor, escribe un mensaje para poder ayudarte."
 
-            # Si no se proporciona ID de usuario, generar uno nuevo
+            # 2. Generar ID de usuario si no se proporciona
             if not usuario_id:
                 usuario_id = str(uuid.uuid4())
 
-            # Obtener o crear sesión para métricas
-            session_id = self._get_or_create_session_safe(usuario_id)
-
             logger.info(
-                f"Procesando mensaje para usuario {usuario_id}, sesión {session_id}: {mensaje_usuario[:100]}...")
+                f"🚀 PROCESANDO mensaje para usuario {usuario_id}: {mensaje_usuario[:50]}...")
 
-            # Actualizar información del usuario si se proporciona
+            # 3. Actualizar información del usuario si se proporciona
             if info_usuario:
                 try:
                     self.chatbot_service.actualizar_datos_usuario(
                         usuario_id, info_usuario)
+                    logger.debug(
+                        f"✅ Datos de usuario actualizados para {usuario_id}")
                 except Exception as e:
-                    logger.warning(f"Error actualizando datos usuario: {e}")
+                    logger.warning(f"⚠️ Error actualizando datos usuario: {e}")
 
-            # CORRECCIÓN: Separar operaciones de BD de operaciones de IA
-            bd_start_time = time.perf_counter()
-
-            # Obtener la conversación ANTES de agregar mensajes
-            conversacion = self.chatbot_service.obtener_o_crear_conversacion(
-                usuario_id)
-            mensaje_count_before = len(
-                conversacion.mensajes) if conversacion else 0
-
-            # Verificar si la conversación está escalada a un humano
-            conversacion_escalada = self._check_escalation_status(usuario_id)
-
-            # CORREGIDO: Siempre guardar el mensaje del usuario
-            self.chatbot_service.agregar_mensaje_usuario(
-                usuario_id, mensaje_usuario)
-
-            bd_time_ms = (time.perf_counter() - bd_start_time) * 1000
-            logger.debug(
-                f"Tiempo operaciones BD iniciales: {bd_time_ms:.2f}ms")
-
-            # Si la conversación ya está escalada, manejar apropiadamente
-            if conversacion_escalada:
-                return self._handle_escalated_conversation(
-                    usuario_id, mensaje_usuario, session_id, total_start_time
-                )
-
-            # Verificar si debe escalar a un humano (ANTES del procesamiento de IA)
-            if self._should_escalate(mensaje_usuario, usuario_id):
-                return self._handle_new_escalation(
-                    usuario_id, mensaje_usuario, session_id, total_start_time
-                )
-
-            # === INICIO MEDICIÓN DE IA ===
-            ai_start_time = time.perf_counter()
-
-            # Analizar el sentimiento del mensaje
-            sentiment_start = time.perf_counter()
-            datos_sentimiento = self._analyze_sentiment_safe(mensaje_usuario)
-            sentiment_time = (time.perf_counter() - sentiment_start) * 1000
-
-            # Obtener historial optimizado (LIMITADO para mejor rendimiento)
-            history_start = time.perf_counter()
-            mensajes = self._get_optimized_history(usuario_id, max_messages=20)
-            history_time = (time.perf_counter() - history_start) * 1000
-
-            logger.debug(
-                f"Historial obtenido: {len(mensajes)} mensajes en {history_time:.2f}ms")
-
-            # Clasificar intent
-            intent_start = time.perf_counter()
-            intent = self._classify_intent_safe(
-                mensaje_usuario, datos_sentimiento)
-            intent_time = (time.perf_counter() - intent_start) * 1000
-
-            # Preparar instrucciones optimizadas
-            instrucciones_adicionales = self._prepare_instructions(
-                mensajes, datos_sentimiento, mensaje_count_before
+            # 4. ⭐ CLAVE: Usar el método principal que mantiene contexto
+            respuesta = self.chatbot_service.procesar_mensaje(
+                usuario_id=usuario_id,
+                texto=mensaje_usuario,
+                info_usuario=info_usuario
             )
 
-            # MEDICIÓN CRÍTICA: Generación de respuesta con IA
-            response_start = time.perf_counter()
-            respuesta = self.ai_provider.generar_respuesta(
-                mensajes, instrucciones_adicionales)
-            response_time = (time.perf_counter() - response_start) * 1000
-
-            ai_total_time_ms = (time.perf_counter() - ai_start_time) * 1000
-            # === FIN MEDICIÓN DE IA ===
-
-            # Log detallado de tiempos de IA
-            logger.info(f"Tiempos IA - Sentimiento: {sentiment_time:.1f}ms, "
-                        f"Historial: {history_time:.1f}ms, Intent: {intent_time:.1f}ms, "
-                        f"Respuesta: {response_time:.1f}ms, Total IA: {ai_total_time_ms:.1f}ms")
-
-            # Guardar respuesta en BD
-            save_start = time.perf_counter()
-            self.chatbot_service.agregar_mensaje_asistente(
-                usuario_id, respuesta)
-            save_time = (time.perf_counter() - save_start) * 1000
-
-            # Calcular métricas finales
-            total_processing_time_ms = (
-                time.perf_counter() - total_start_time) * 1000
-            token_count = self._estimate_token_count(
-                mensaje_usuario, respuesta)
-
-            # Registrar métricas mejoradas
-            self._record_enhanced_metrics(
-                session_id=session_id,
-                user_message=mensaje_usuario,
-                bot_response=respuesta,
-                sentiment=datos_sentimiento.sentimiento,
-                sentiment_confidence=datos_sentimiento.confianza,
-                intent=intent,
-                ai_processing_time_ms=ai_total_time_ms,
-                total_processing_time_ms=total_processing_time_ms,
-                token_count=token_count,
-                detected_entities=getattr(
-                    datos_sentimiento, 'entidades', None),
-                response_time_breakdown={
-                    'sentiment_analysis': sentiment_time,
-                    'history_retrieval': history_time,
-                    'intent_classification': intent_time,
-                    'ai_response_generation': response_time,
-                    'database_save': save_time
-                }
-            )
-
-            # Log de rendimiento si es lento
-            if total_processing_time_ms > 5000:
-                logger.warning(
-                    f"Respuesta lenta ({total_processing_time_ms:.1f}ms) para usuario {usuario_id}")
-
+            # 5. Métricas básicas
+            total_time = (time.perf_counter() - total_start_time) * 1000
             logger.info(
-                f"Respuesta enviada a {usuario_id} en {total_processing_time_ms:.1f}ms: {respuesta[:100]}...")
+                f"✅ RESPUESTA generada en {total_time:.1f}ms para usuario {usuario_id}")
+
+            # 6. Registrar métricas básicas si el collector está disponible
+            try:
+                if hasattr(self.metrics_collector, 'record_conversation'):
+                    self.metrics_collector.record_conversation(
+                        session_id=usuario_id,
+                        user_message=mensaje_usuario,
+                        bot_response=respuesta,
+                        processing_time_ms=total_time,
+                        sentiment=SentimentType.NEUTRAL,  # Simplificado
+                        intent=IntentType.INFORMATION    # Simplificado
+                    )
+            except Exception as e:
+                logger.debug(f"Error registrando métricas: {e}")
 
             return respuesta
 
         except Exception as e:
-            total_time_ms = (time.perf_counter() - total_start_time) * 1000
+            total_time = (time.perf_counter() - total_start_time) * 1000
             logger.error(
-                f"Error procesando mensaje (tiempo: {total_time_ms:.1f}ms): {e}", exc_info=True)
+                f"❌ ERROR procesando mensaje ({total_time:.1f}ms): {e}", exc_info=True)
+            return "Lo siento, estoy experimentando problemas técnicos en este momento. ¿Podrías intentarlo de nuevo más tarde?"
 
-            # Registrar error en métricas si tenemos session_id
-            if session_id:
-                self._record_error_metrics(
-                    session_id, mensaje_usuario, total_time_ms)
-
-            return "Lo siento, ocurrió un error al procesar tu mensaje. Por favor, inténtalo de nuevo."
-
-    def _get_or_create_session_safe(self, usuario_id: str) -> Optional[str]:
-        """Obtiene o crea sesión de forma segura"""
+    # Métodos auxiliares simplificados (mantenidos por compatibilidad)
+    def _analyze_sentiment_safe(self, mensaje: str):
+        """Analiza sentimiento de forma segura - SIMPLIFICADO"""
         try:
-            return self.metrics_collector.get_or_create_session_for_user(usuario_id)
+            return self.chatbot_service.analizar_sentimiento_mensaje(mensaje)
         except Exception as e:
-            logger.error(f"Error obteniendo sesión: {e}")
-            return None
+            logger.debug(f"Error analizando sentimiento: {e}")
+
+            class MockSentiment:
+                sentimiento = "neutral"
+                confianza = 0.5
+                emociones = []
+                entidades = {}
+            return MockSentiment()
+
+    def _get_or_create_session_safe(self, usuario_id: str) -> str:
+        """Obtiene o crea sesión de forma segura - SIMPLIFICADO"""
+        try:
+            # Para simplicidad, usar el usuario_id como session_id
+            return usuario_id
+        except Exception as e:
+            logger.debug(f"Error creando sesión: {e}")
+            return str(uuid.uuid4())
 
     def _check_escalation_status(self, usuario_id: str) -> bool:
-        """Verifica si la conversación está escalada"""
+        """Verifica estado de escalación - SIMPLIFICADO"""
         try:
-            if hasattr(self.chatbot_service, 'esta_escalada'):
-                return self.chatbot_service.esta_escalada(usuario_id)
+            return self.chatbot_service.esta_escalada(usuario_id)
         except Exception as e:
-            logger.error(f"Error verificando escalación: {e}")
-        return False
+            logger.debug(f"Error verificando escalación: {e}")
+            return False
 
     def _should_escalate(self, mensaje: str, usuario_id: str) -> bool:
         """Determina si debe escalar a humano"""
