@@ -26,6 +26,7 @@ load_dotenv()
 # Importar componentes necesarios
 from bot_siacasa.domain.services.chatbot_service import ChatbotService
 from bot_siacasa.infrastructure.repositories.memory_repository import MemoryRepository
+
 from bot_siacasa.infrastructure.ai.openai_provider import OpenAIProvider
 from bot_siacasa.application.use_cases.analizar_sentimiento_use_case import AnalizarSentimientoUseCase
 from bot_siacasa.application.use_cases.procesar_mensaje_use_case import ProcesarMensajeUseCase
@@ -34,7 +35,8 @@ from bot_siacasa.interfaces.web.web_app import WebApp
 from bot_siacasa.domain.entities.analisis_sentimiento import AnalisisSentimiento
 from bot_siacasa.infrastructure.db.support_repository import SupportRepository
 from bot_siacasa.infrastructure.websocket.socketio_server import init_socketio_server
-from bot_siacasa.infrastructure.db.neondb_connector import NeonDBConnector  
+from bot_siacasa.infrastructure.repositories.postgresql_repository import PostgreSQLRepository
+from bot_siacasa.infrastructure.db.neondb_connector import NeonDBConnector
 
 def main():
     """Función principal para iniciar la aplicación."""
@@ -54,7 +56,7 @@ def main():
         logger.info(f"Usando configuración para banco: {bank_config['bank_name']}")
         
         # Crear el repositorio
-        repository = MemoryRepository()
+        repository = PostgreSQLRepository()
         logger.info("Repositorio en memoria inicializado")
         
         # Inicializar el conector de base de datos
