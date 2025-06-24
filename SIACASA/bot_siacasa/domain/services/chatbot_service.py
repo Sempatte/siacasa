@@ -253,7 +253,7 @@ Características:
             
             # 2. Analizar sentimiento del mensaje del usuario ANTES de procesarlo
             analisis = self.sentimiento_analyzer.execute(texto_mensaje)
-            sentimental_score = analisis.score if analisis else 0.0
+            sentimental_score = analisis.confianza if analisis else 0.0
 
             # 3. Generar respuesta de la IA
             historial_mensajes = conversacion.obtener_historial_para_ia()
