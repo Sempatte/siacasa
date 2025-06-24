@@ -286,7 +286,6 @@ class ChatbotService:
             
             # 8. Guardar respuesta del asistente
             mensaje_respuesta = Mensaje(
-                id=str(uuid.uuid4()),
                 role="assistant", 
                 content=respuesta,
                 timestamp=datetime.now()
