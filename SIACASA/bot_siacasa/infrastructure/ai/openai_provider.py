@@ -1,4 +1,5 @@
 # bot_siacasa/infrastructure/ai/openai_provider.py
+from datetime import datetime
 import json
 import logging
 import time
@@ -75,7 +76,7 @@ class OpenAIProvider(IAProviderInterface):
     
     def analizar_sentimiento(self, texto: str) -> Dict:
         """
-        Analiza el sentimiento con cache y configuración optimizada.
+        Analiza el sentimiento del texto de manera más completa.
         """
         start_time = time.perf_counter()
         
@@ -87,44 +88,81 @@ class OpenAIProvider(IAProviderInterface):
                 logger.debug(f"Sentimiento obtenido del cache en {execution_time:.2f}ms")
                 return self._sentiment_cache[cache_key]
             
-            # Configuración optimizada para análisis de sentimiento
+            # Prompt mejorado para análisis completo
+            system_prompt = """Analiza el siguiente texto y responde SOLO con JSON válido con esta estructura exacta:
+    {
+        "sentimiento": "positivo/negativo/neutral",
+        "confianza": 0.0-1.0,
+        "emociones": ["lista de emociones detectadas"],
+        "intent": "tipo de intención del usuario",
+        "intent_confidence": 0.0-1.0,
+        "entidades": {
+            "monto": "si menciona cantidad de dinero",
+            "producto": "si menciona producto bancario",
+            "accion": "acción que desea realizar"
+        },
+        "escalacion_requerida": true/false,
+        "tono_sugerido": "tono recomendado para responder"
+    }
+
+    Contexto: Eres un analizador para un chatbot bancario. Los intents comunes son:
+    - consulta_saldo: preguntas sobre saldo o estado de cuenta
+    - transferencia: desea transferir dinero
+    - prestamo: consultas sobre préstamos o créditos
+    - tarjeta: consultas sobre tarjetas
+    - soporte: problemas o quejas
+    - saludo: saludos o despedidas
+    - consulta_general: otras consultas
+
+    Las emociones pueden ser: felicidad, tristeza, enojo, frustración, confusión, satisfacción, neutral.
+    Los tonos sugeridos: profesional, empático, amigable, formal, tranquilizador."""
+
+            # Hacer la llamada a OpenAI
             response = openai.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {
-                        "role": "system", 
-                        "content": "Analiza el sentimiento del texto y responde SOLO con JSON válido: {\"sentimiento\": \"positivo/negativo/neutral\", \"confianza\": 0.0-1.0, \"emociones\": [\"lista\"]}"
-                    },
-                    {"role": "user", "content": f"Texto: {texto}"}
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Analiza este texto: \"{texto}\""}
                 ],
                 response_format={"type": "json_object"},
-                max_tokens=100,  # Respuesta corta para sentimiento
+                max_tokens=200,  # Un poco más para el análisis completo
                 temperature=0.1,  # Muy determinístico
-                timeout=5.0      # Timeout corto para sentimiento
+                timeout=5.0
             )
             
             # Procesar resultado
             resultado_json = json.loads(response.choices[0].message.content)
             
+            # Normalizar y validar el resultado
+            resultado_normalizado = {
+                "sentimiento": resultado_json.get("sentimiento", "neutral"),
+                "confianza": float(resultado_json.get("confianza", 0.5)),
+                "emociones": resultado_json.get("emociones", []),
+                "intent": resultado_json.get("intent", "consulta_general"),
+                "intent_confidence": float(resultado_json.get("intent_confidence", 0.7)),
+                "entidades": resultado_json.get("entidades", {}),
+                "escalacion_requerida": resultado_json.get("escalacion_requerida", False),
+                "tono_sugerido": resultado_json.get("tono_sugerido", "profesional"),
+                "metadata": {
+                    "analyzed_at": datetime.now().isoformat(),
+                    "model": self.model
+                }
+            }
+            
             # Agregar al cache
-            self._add_to_cache(self._sentiment_cache, cache_key, resultado_json)
+            self._add_to_cache(self._sentiment_cache, cache_key, resultado_normalizado)
             
             execution_time = (time.perf_counter() - start_time) * 1000
             logger.debug(f"Sentimiento analizado con IA en {execution_time:.2f}ms")
             
-            return resultado_json
+            return resultado_normalizado
             
         except Exception as e:
             execution_time = (time.perf_counter() - start_time) * 1000
             logger.error(f"Error en análisis de sentimiento ({execution_time:.2f}ms): {e}")
             
-            # Fallback básico
-            return {
-                "sentimiento": "neutral",
-                "confianza": 0.5,
-                "emociones": []
-            }
-    
+            # Fallback mejorado con análisis básico por reglas
+            return self._analisis_fallback(texto)
     def generar_respuesta(self, mensajes: List[Dict[str, str]], instrucciones_adicionales: str = None) -> str:
         """
         Genera respuesta optimizada con cache y configuración de velocidad.

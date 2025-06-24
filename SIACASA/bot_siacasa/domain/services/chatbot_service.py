@@ -237,13 +237,71 @@ Características:
             logger.error(
                 f"Error agregando mensaje asistente en {execution_time:.2f}ms: {e}")
             raise
-
+    
+    def _estimar_tokens(self, texto: str) -> int:
+        """
+        Estima el número de tokens en un texto.
+        Aproximación simple: ~1 token por cada 4 caracteres.
+        """
+        return len(texto) // 4
+    
+    def _determinar_tono_respuesta(self, sentiment: str, is_escalation: bool) -> str:
+        """
+        Determina el tono apropiado para la respuesta basado en el contexto.
+        """
+        if is_escalation:
+            return "empathetic_supportive"
+        elif sentiment == "negativo":
+            return "empathetic_helpful"
+        elif sentiment == "positivo":
+            return "friendly_professional"
+        else:
+            return "professional_neutral"
+    
+    def _detectar_intent(self, texto: str) -> str:
+        """
+        Detecta el intent del mensaje usando reglas simples.
+        En producción, esto debería usar un servicio de NLU.
+        """
+        texto_lower = texto.lower()
+        
+        # Detección básica de intents bancarios
+        if any(word in texto_lower for word in ['saldo', 'cuánto tengo', 'mi cuenta']):
+            return 'consulta_saldo'
+        elif any(word in texto_lower for word in ['transferir', 'transferencia', 'enviar dinero']):
+            return 'transferencia'
+        elif any(word in texto_lower for word in ['préstamo', 'crédito', 'prestar']):
+            return 'prestamo'
+        elif any(word in texto_lower for word in ['tarjeta', 'débito', 'crédito']):
+            return 'tarjeta'
+        elif any(word in texto_lower for word in ['ayuda', 'problema', 'no funciona', 'error']):
+            return 'soporte'
+        elif any(word in texto_lower for word in ['hola', 'buenos días', 'buenas tardes']):
+            return 'saludo'
+        else:
+            return 'consulta_general'
+        
+    def _check_escalation_keywords(self, texto: str) -> bool:
+        """
+        Verifica si el mensaje contiene palabras clave de escalación.
+        """
+        escalation_keywords = [
+            'hablar con humano', 'agente humano', 'persona real',
+            'operador', 'no entiendes', 'no me ayudas',
+            'quiero hablar con alguien', 'transferir a agente'
+        ]
+        
+        texto_lower = texto.lower()
+        return any(keyword in texto_lower for keyword in escalation_keywords)
+    
     def procesar_mensaje(self, usuario_id: str, texto_mensaje: str) -> str:
         """
-        Procesa un mensaje de un usuario, incluyendo análisis de sentimiento y tiempo de procesamiento.
+        Procesa un mensaje de un usuario, incluyendo análisis completo de sentimiento y métricas.
         """
         # --- INICIO DE LA MEDICIÓN ---
         start_time = time.perf_counter()
+        ai_start_time = None
+        ai_end_time = None
 
         try:
             # 1. Obtener o crear conversación
@@ -253,38 +311,87 @@ Características:
             
             # 2. Analizar sentimiento del mensaje del usuario ANTES de procesarlo
             analisis = self.sentimiento_analyzer.execute(texto_mensaje)
-            sentimental_score = analisis.confianza if analisis else 0.0
-
-            # 3. Generar respuesta de la IA
+            
+            # Extraer todos los datos del análisis
+            sentiment = analisis.sentimiento if analisis else "neutral"
+            sentiment_confidence = analisis.confianza if analisis else 0.5
+            emociones = analisis.emociones if hasattr(analisis, 'emociones') else []
+            
+            # 3. Analizar intent y entidades (si tienes un servicio de NLU, úsalo aquí)
+            # Por ahora, valores por defecto
+            intent = self._detectar_intent(texto_mensaje)
+            intent_confidence = 0.8  # Valor por defecto
+            
+            # 4. Verificar si es una solicitud de escalación
+            is_escalation_request = self._check_escalation_keywords(texto_mensaje)
+            
+            # 5. Generar respuesta de la IA
             historial_mensajes = conversacion.obtener_historial()
             historial_mensajes.append({"role": "user", "content": texto_mensaje})
             
+            # Medir tiempo específico de IA
+            ai_start_time = time.perf_counter()
             respuesta_ia = self.ai_provider.generar_respuesta(historial_mensajes)
+            ai_end_time = time.perf_counter()
+            ai_processing_time_ms = (ai_end_time - ai_start_time) * 1000
+            
+            # 6. Contar tokens (aproximación simple)
+            token_count = self._estimar_tokens(texto_mensaje + respuesta_ia)
+            
+            # 7. Determinar tono de respuesta
+            response_tone = self._determinar_tono_respuesta(sentiment, is_escalation_request)
 
             # --- FIN DE LA MEDICIÓN ---
             end_time = time.perf_counter()
             processing_time_ms = (end_time - start_time) * 1000
 
-            # 4. Crear y añadir los mensajes a la conversación CON LOS NUEVOS DATOS
+            # 8. Crear y añadir los mensajes a la conversación CON TODOS LOS DATOS
             mensaje_usuario = Mensaje(
                 role="user",
                 content=texto_mensaje,
-                sentiment_score=sentimental_score,  # ← Corregido
-                processing_time_ms=round(processing_time_ms)
+                conversacion_id=conversacion.id,
+                timestamp=datetime.now(),
+                # Campos de análisis
+                sentiment=sentiment,
+                sentiment_score=sentiment_confidence,  # Nota: usando sentiment_score para la confianza
+                sentiment_confidence=sentiment_confidence,
+                intent=intent,
+                intent_confidence=intent_confidence,
+                is_escalation_request=is_escalation_request,
+                # Métricas de procesamiento
+                processing_time_ms=round(processing_time_ms),
+                ai_processing_time_ms=round(ai_processing_time_ms),
+                token_count=token_count,
+                response_tone=response_tone,
+                # Metadata adicional
+                metadata={
+                    "emociones": emociones,
+                    "usuario_id": usuario_id
+                }
             )
             
             mensaje_bot = Mensaje(
                 role="assistant",
-                content=respuesta_ia
+                content=respuesta_ia,
+                conversacion_id=conversacion.id,
+                timestamp=datetime.now(),
+                token_count=self._estimar_tokens(respuesta_ia),
+                metadata={
+                    "response_tone": response_tone
+                }
             )
 
             conversacion.agregar_mensaje(mensaje_usuario)
             conversacion.agregar_mensaje(mensaje_bot)
             
-            # 5. Guardar la conversación completa en el repositorio
+            # 9. Guardar la conversación completa en el repositorio
             self.repository.guardar_conversacion(conversacion)
             
-            logger.info(f"Mensaje procesado para {usuario_id} en {processing_time_ms:.2f}ms con score {sentimental_score:.2f}")
+            logger.info(
+                f"Mensaje procesado para {usuario_id} en {processing_time_ms:.2f}ms "
+                f"(IA: {ai_processing_time_ms:.2f}ms) | Sentimiento: {sentiment} ({sentiment_confidence:.2f}) | "
+                f"Intent: {intent} | Tokens: {token_count}"
+            )
             
             return respuesta_ia
 
