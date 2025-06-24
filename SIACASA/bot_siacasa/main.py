@@ -18,7 +18,7 @@ from bot_siacasa.config.config import OptimizedConfig, EnvironmentConfig, get_op
 from bot_siacasa.domain.services.chatbot_service import ChatbotService
 from bot_siacasa.domain.services.response_cache_service import get_cache_service
 from bot_siacasa.infrastructure.ai.openai_provider import OpenAIProvider
-from bot_siacasa.infrastructure.repositories.memory_repository import MemoryRepository # Corregido: 'repositories' en plural
+from bot_siacasa.infrastructure.repositories.postgresql_repository import PostgreSQLRepository
 from bot_siacasa.application.use_cases.procesar_mensaje_use_case import ProcesarMensajeUseCase
 from bot_siacasa.application.use_cases.analizar_sentimiento_use_case import AnalizarSentimientoUseCase
 
@@ -65,9 +65,10 @@ class OptimizedChatbotApp:
         init_start = time.perf_counter()
         
         try:
-            # 1. Inicializar repositorio
-            self.repository = MemoryRepository()
-            logger.info("✅ Repository inicializado")
+            # 1. Inicializar conector de base de datos y repositorio PERSISTENTE
+            db_connector = NeonDBConnector()
+            self.repository = PostgreSQLRepository(db_connector)
+            logger.info("✅ PostgreSQL Repository inicializado")
             
             # 2. Inicializar proveedor de IA con configuración optimizada
             if not EnvironmentConfig.OPENAI_API_KEY:
