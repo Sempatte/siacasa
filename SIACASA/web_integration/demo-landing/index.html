@@ -35,7 +35,7 @@
         window.SIACASA_CONFIG = {
             botName: "Asistente Virtual",
             botSubtitle: "Caja Rural Los Andes",
-            apiEndpoint: "http://localhost:3200/api/mensaje",
+            apiEndpoint: "http://161.132.49.18:3200/api/mensaje",
             initialMessage: "Hola, soy SIACASA, tu asistente virtual de Caja Rural Los Andes. ¿En qué puedo ayudarte hoy?",
             theme: {
                 primaryColor: "#1B5E20",
@@ -375,7 +375,7 @@
 
             // Cargar el script del chatbot
             const script = document.createElement('script');
-            script.src = "http://localhost:3200/api/embed/bn.js";
+            script.src = "http://161.132.49.18:3200/api/embed/bn.js";
             document.body.appendChild(script);
         });
     </script>
