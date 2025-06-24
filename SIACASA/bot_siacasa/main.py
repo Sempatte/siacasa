@@ -99,8 +99,7 @@ class OptimizedChatbotApp:
             
             # 5. Inicializar caso de uso principal
             self.procesar_mensaje_use_case = ProcesarMensajeUseCase(
-                chatbot_service=self.chatbot_service,
-                ai_provider=self.ai_provider
+                chatbot_service=self.chatbot_service
             )
             logger.info("✅ ProcesarMensajeUseCase inicializado")
             
