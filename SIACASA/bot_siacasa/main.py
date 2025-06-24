@@ -3,6 +3,11 @@ import logging
 import time
 import asyncio
 from typing import Optional
+from dotenv import load_dotenv  # ← AGREGAR ESTA LÍNEA
+import os
+
+# Cargar variables de entorno ANTES de importar las configuraciones
+load_dotenv()  # ← AGREGAR ESTA LÍNEA
 
 from bot_siacasa.config.config import OptimizedConfig, EnvironmentConfig, get_optimized_config
 from bot_siacasa.domain.services.chatbot_service import ChatbotService
@@ -233,11 +238,30 @@ def main():
         app = get_app()
         
         # Mostrar estadísticas iniciales
-        #stats = app.get_performance_stats()
+        stats = app.get_performance_stats()
+        logger.info(f"📊 App inicializada - Uptime: {stats['uptime_seconds']}s")
+        
+        print("✅ Aplicación lista. Presiona Ctrl+C para detener.")
+        
+        # Mantener la aplicación viva con un bucle simple
+        import signal
+        import sys
+        
+        def signal_handler(sig, frame):
+            logger.info("🛑 Cerrando aplicación...")
+            sys.exit(0)
+        
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+        
+        # Loop infinito hasta recibir señal
+        while True:
+            time.sleep(1)
 
     except Exception as e:
         logger.error(f"Error fatal: {e}", exc_info=True)
         print(f"❌ Error fatal: {e}")
+        exit(1)
 
 
 if __name__ == "__main__":
