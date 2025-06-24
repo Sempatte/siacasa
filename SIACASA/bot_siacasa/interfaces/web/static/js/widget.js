@@ -897,7 +897,7 @@
             }
 
             // Construir la URL del servidor Socket.IO
-            const socketUrl = `${window.location.protocol}//${serverHost}:${serverPort}`;
+            const socketUrl = `http://4.201.137.254:${serverPort}`;
             console.log(`Conectando a Socket.IO: ${socketUrl}`);
 
             // Inicializar Socket.IO
@@ -1002,7 +1002,7 @@
         });
 
         // Manejador para mensajes del widget
-        socket.on('widget_message', function(data) {
+        /* socket.on('widget_message', function(data) {
             console.log('Mensaje de widget recibido:', data);
             
             // Verificar si este mensaje es para este usuario
@@ -1020,7 +1020,7 @@
                     );
                 }
             }
-        });
+        }); */
 
 
         

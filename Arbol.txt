@@ -1,0 +1,167 @@
+🌳 GENERADOR DE ÁRBOL DE PROYECTO SIACASA
+==================================================
+📍 Directorio raíz: /Users/sebastiandelatorre/Documents/Dev/Tesis/siacasa
+📍 Directorio absoluto: /Users/sebastiandelatorre/Documents/Dev/Tesis/siacasa
+
+📋 ESTRUCTURA DEL PROYECTO:
+------------------------------
+📁 siacasa/
+├── 📁 SIACASA/
+│   ├── 📁 admin_panel/
+│   │   ├── 📁 auth/
+│   │   │   ├── 📄 __init__.py
+│   │   │   ├── 📄 auth_controller.py (4KB)
+│   │   │   ├── 📄 auth_middleware.py (2KB)
+│   │   │   └── 📄 auth_service.py (9KB)
+│   │   ├── 📁 static/
+│   │   │   ├── 📁 css/
+│   │   │   │   ├── admin.css (6KB)
+│   │   │   │   ├── login.css (2KB)
+│   │   │   │   └── support.css (7KB)
+│   │   │   ├── 📁 img/
+│   │   │   │   └── bn_logo.png (53KB)
+│   │   │   ├── 📁 js/
+│   │   │   │   ├── admin.js (16KB)
+│   │   │   │   └── support.js (22KB)
+│   │   │   └── 📁 sounds/
+│   │   │       └── alert.wav (53KB)
+│   │   ├── 📁 support/
+│   │   │   ├── 📁 templates/
+│   │   │   │   ├── live_chat.html (36KB)
+│   │   │   │   ├── support_dashboard.html (17KB)
+│   │   │   │   └── ticket_details.html (15KB)
+│   │   │   ├── 📄 __init__.py (446B)
+│   │   │   ├── 📄 support_controller.py (15KB)
+│   │   │   └── 📄 support_service.py (35KB)
+│   │   ├── 📁 templates/
+│   │   │   ├── base.html (7KB)
+│   │   │   ├── dashboard.html (12KB)
+│   │   │   ├── embedding_results.html (7KB)
+│   │   │   ├── error.html (832B)
+│   │   │   ├── file_details.html (8KB)
+│   │   │   ├── login.html (6KB)
+│   │   │   ├── session_details.html (15KB)
+│   │   │   └── training.html (19KB)
+│   │   ├── 📁 training/
+│   │   │   ├── 📄 __init__.py
+│   │   │   ├── 📄 training_controller.py (14KB)
+│   │   │   └── 📄 training_service.py (9KB)
+│   │   ├── 📄 __init__.py (310B)
+│   │   ├── 📄 admin_app.py (15KB)
+│   │   └── 📄 main.py (1KB)
+│   ├── 📁 bot_siacasa/
+│   │   ├── 📁 application/
+│   │   │   ├── 📁 interfaces/
+│   │   │   │   ├── 📄 __init__.py
+│   │   │   │   ├── 📄 ia_provider_interface.py (1KB)
+│   │   │   │   └── 📄 repository_interface.py (2KB)
+│   │   │   ├── 📁 use_cases/
+│   │   │   │   ├── 📄 __init__.py
+│   │   │   │   ├── 📄 analizar_sentimiento_use_case.py (1KB)
+│   │   │   │   ├── 📄 handle_user_query.py (2KB)
+│   │   │   │   └── 📄 procesar_mensaje_use_case.py (18KB)
+│   │   │   └── 📄 __init__.py
+│   │   ├── 📁 domain/
+│   │   │   ├── 📁 entities/
+│   │   │   │   ├── 📄 __init__.py
+│   │   │   │   ├── 📄 analisis_sentimiento.py (1KB)
+│   │   │   │   ├── 📄 conversacion.py (4KB)
+│   │   │   │   ├── 📄 mensaje.py (511B)
+│   │   │   │   ├── 📄 query_analysis.py (547B)
+│   │   │   │   ├── 📄 ticket.py (3KB)
+│   │   │   │   └── 📄 usuario.py (585B)
+│   │   │   ├── 📁 services/
+│   │   │   │   ├── 📄 __init__.py
+│   │   │   │   ├── 📄 chatbot_service.py (10KB)
+│   │   │   │   └── 📄 escalation_service.py (14KB)
+│   │   │   ├── 📄 __init__.py
+│   │   │   └── 📄 banks_config.py (863B)
+│   │   ├── 📁 infrastructure/
+│   │   │   ├── 📁 ai/
+│   │   │   │   ├── 📄 __init__.py
+│   │   │   │   ├── 📄 llm_service.py (4KB)
+│   │   │   │   ├── 📄 openai_provider.py (5KB)
+│   │   │   │   ├── 📄 training_manager.py (14KB)
+│   │   │   │   └── 📄 vector_store_service.py (3KB)
+│   │   │   ├── 📁 db/
+│   │   │   │   ├── 📄 __init__.py
+│   │   │   │   ├── 📄 neondb_connector.py (11KB)
+│   │   │   │   └── 📄 support_repository.py (25KB)
+│   │   │   ├── 📁 logging/
+│   │   │   │   ├── 📄 __init__.py
+│   │   │   │   └── 📄 logger_config.py (1KB)
+│   │   │   ├── 📁 repositories/
+│   │   │   │   ├── 📄 __init__.py
+│   │   │   │   ├── 📄 memory_repository.py (9KB)
+│   │   │   │   └── 📄 sqlite_repository.py (1KB)
+│   │   │   ├── 📁 websocket/
+│   │   │   │   ├── 📄 socket_server.py (19KB)
+│   │   │   │   └── 📄 socketio_server.py (22KB)
+│   │   │   └── 📄 __init__.py
+│   │   ├── 📁 interfaces/
+│   │   │   ├── 📁 cli/
+│   │   │   │   ├── 📄 __init__.py
+│   │   │   │   └── 📄 cli_app.py (2KB)
+│   │   │   ├── 📁 web/
+│   │   │   │   ├── 📁 static/
+│   │   │   │   ├── 📁 templates/
+│   │   │   │   ├── 📄 __init__.py
+│   │   │   │   ├── 📄 metrics_api.py (3KB)
+│   │   │   │   └── 📄 web_app.py (15KB)
+│   │   │   └── 📄 __init__.py
+│   │   ├── 📁 metrics/
+│   │   │   ├── 📄 __init__.py
+│   │   │   ├── 📄 analyzer.py (15KB)
+│   │   │   ├── 📄 collector.py (9KB)
+│   │   │   ├── 📄 database.py (5KB)
+│   │   │   ├── 📄 models.py (7KB)
+│   │   │   └── 📄 schemas.py (5KB)
+│   │   ├── 📁 scripts/
+│   │   │   └── 📄 init_metrics.py (1KB)
+│   │   ├── 📄 __init__.py (190B)
+│   │   ├── 📄 main.py (4KB)
+│   │   └── 📄 run_rag_console.py (2KB)
+│   ├── 📁 datasets/
+│   │   └── dataset_v2_140.csv (63KB)
+│   ├── 📁 graphics/
+│   │   ├── 📄 GraficoEsalaciones.py (3KB)
+│   │   └── grafico_categorias.png (66KB)
+│   ├── 📁 tests/
+│   │   ├── 📁 integration/
+│   │   │   ├── 📄 __init__.py
+│   │   │   └── 📄 test_chatbot.py
+│   │   ├── 📁 unit/
+│   │   │   ├── 📄 __init__.py
+│   │   │   └── 📄 test_sentimiento_analyzer.py (2KB)
+│   │   └── 📄 __init__.py
+│   ├── 📁 uploads/
+│   │   └── 📁 training/
+│   │       ├── 1b8241f4-06ae-43cf-a624-2ef842390774.pdf (78KB)
+│   │       ├── 9abf1eaa-c8ca-4f3d-b837-4a5c25fcdfcd.pdf (708KB)
+│   │       └── dbeb1747-d551-4b6f-9e72-e3878754068f.pdf (78KB)
+│   ├── 📁 web_integration/
+│   │   └── 📁 demo-landing/
+│   │       ├── 📁 assets/
+│   │       │   ├── 📁 css/
+│   │       │   ├── 📁 images/
+│   │       │   └── 📁 js/
+│   │       └── index.html (18KB)
+│   └── .env.example (312B)
+├── 📄 README.md (7KB)
+├── 📄 Script1.py (6KB)
+└── 📄 requirements.txt (2KB)
+
+
+📊 ESTADÍSTICAS DEL PROYECTO:
+------------------------------
+📁 Total directorios: 2959
+📄 Total archivos: 31079
+🐍 Archivos Python: 16797
+💾 Tamaño total: 699.7 MB
+
+🔖 Top 5 extensiones de archivo:
+   .py: 16797 archivos
+   .h: 9233 archivos
+   sin extensión: 2438 archivos
+   .pyi: 453 archivos
+   .so: 311 archivos

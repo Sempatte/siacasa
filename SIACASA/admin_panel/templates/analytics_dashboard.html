@@ -1,0 +1,400 @@
+<!-- admin_panel/templates/analytics_dashboard.html -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics - SIACASA</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        .metric-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        .metric-card.success {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        }
+        
+        .metric-card.warning {
+            background: linear-gradient(135deg, #fcb045 0%, #fd1d1d 100%);
+        }
+        
+        .metric-card.info {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .metric-card.danger {
+            background: linear-gradient(135deg, #fd1d1d 0%, #fcb045 100%);
+        }
+        
+        .metric-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .metric-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+        
+        .chart-container {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        
+        .status-healthy { background-color: #28a745; }
+        .status-unhealthy { background-color: #dc3545; }
+        .status-warning { background-color: #ffc107; }
+        
+        .refresh-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+            border-radius: 10px;
+            padding: 8px 16px;
+            cursor: pointer;
+        }
+        
+        .auto-refresh {
+            color: #28a745;
+            font-size: 0.8rem;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <div class="container-fluid">
+        <!-- Header -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h1 class="h3 mb-0">📊 Analytics Dashboard</h1>
+                        <p class="text-muted">{{ bank_name }} - Métricas en tiempo real</p>
+                    </div>
+                    <div>
+                        <button class="refresh-btn" onclick="refreshData()">
+                            <i class="fas fa-sync-alt"></i> Actualizar
+                        </button>
+                        <div class="auto-refresh mt-1">
+                            <i class="fas fa-circle text-success"></i> Auto-refresh: 30s
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Estado del Sistema -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="chart-container">
+                    <h5><i class="fas fa-heartbeat"></i> Estado del Sistema</h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p>
+                                <span class="status-indicator status-{{ 'healthy' if health_status.status == 'healthy' else 'unhealthy' }}"></span>
+                                Sistema: <strong>{{ health_status.status|title }}</strong>
+                            </p>
+                            <p>
+                                <span class="status-indicator status-{{ 'healthy' if health_status.database == 'connected' else 'unhealthy' }}"></span>
+                                Base de Datos: <strong>{{ health_status.database|title }}</strong>
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Última actualización:</strong> {{ health_status.timestamp }}</p>
+                            {% if health_status.error %}
+                            <p class="text-danger"><strong>Error:</strong> {{ health_status.error }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Métricas Principales -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="metric-card success">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="metric-value" id="active-sessions">{{ realtime_stats.get('active_sessions_last_24h', 0) }}</div>
+                            <div class="metric-label">Sesiones Activas (24h)</div>
+                        </div>
+                        <i class="fas fa-users fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="metric-card info">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="metric-value" id="total-messages">{{ realtime_stats.get('total_messages_today', 0) }}</div>
+                            <div class="metric-label">Mensajes Hoy</div>
+                        </div>
+                        <i class="fas fa-comments fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="metric-card warning">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="metric-value" id="escalation-rate">{{ "%.1f"|format(realtime_stats.get('escalation_rate_today', 0)) }}%</div>
+                            <div class="metric-label">Tasa de Escalación</div>
+                        </div>
+                        <i class="fas fa-exclamation-triangle fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="metric-card danger">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="metric-value" id="avg-response-time">{{ "%.0f"|format(realtime_stats.get('avg_response_time_today', 0)) }}ms</div>
+                            <div class="metric-label">Tiempo Respuesta Promedio</div>
+                        </div>
+                        <i class="fas fa-clock fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gráficos -->
+        <div class="row">
+            <!-- Sesiones por Día -->
+            <div class="col-md-6 mb-4">
+                <div class="chart-container">
+                    <h5><i class="fas fa-chart-line"></i> Sesiones por Día (Última Semana)</h5>
+                    <canvas id="sessionsChart" style="height: 300px;"></canvas>
+                </div>
+            </div>
+            
+            <!-- Mensajes por Día -->
+            <div class="col-md-6 mb-4">
+                <div class="chart-container">
+                    <h5><i class="fas fa-chart-bar"></i> Mensajes por Día</h5>
+                    <canvas id="messagesChart" style="height: 300px;"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Distribución de Sentimientos -->
+            <div class="col-md-6 mb-4">
+                <div class="chart-container">
+                    <h5><i class="fas fa-smile"></i> Distribución de Sentimientos Hoy</h5>
+                    <canvas id="sentimentChart" style="height: 300px;"></canvas>
+                </div>
+            </div>
+            
+            <!-- Top Intenciones -->
+            <div class="col-md-6 mb-4">
+                <div class="chart-container">
+                    <h5><i class="fas fa-bullseye"></i> Principales Intenciones Hoy</h5>
+                    <canvas id="intentChart" style="height: 300px;"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabla de Datos Detallados -->
+        <div class="row">
+            <div class="col-12">
+                <div class="chart-container">
+                    <h5><i class="fas fa-table"></i> Datos Detallados de la Semana</h5>
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Sesiones</th>
+                                    <th>Mensajes</th>
+                                    <th>Escalaciones</th>
+                                    <th>Satisfacción</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for day in weekly_stats %}
+                                <tr>
+                                    <td>{{ day.date }}</td>
+                                    <td>{{ day.sessions }}</td>
+                                    <td>{{ day.messages }}</td>
+                                    <td>{{ day.escalations }}</td>
+                                    <td>
+                                        {% if day.satisfaction > 0 %}
+                                            {{ "%.1f"|format(day.satisfaction) }}/5
+                                        {% else %}
+                                            N/A
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // Datos de los gráficos
+        const chartData = {{ chart_data|tojson|safe }};
+        
+        // Configuración de Chart.js
+        Chart.defaults.font.family = "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
+        Chart.defaults.color = '#666';
+        
+        // Gráfico de Sesiones
+        const sessionsCtx = document.getElementById('sessionsChart').getContext('2d');
+        const sessionsChart = new Chart(sessionsCtx, {
+            type: 'line',
+            data: {
+                labels: chartData.weekly_sessions.labels,
+                datasets: [{
+                    label: 'Sesiones',
+                    data: chartData.weekly_sessions.data,
+                    borderColor: '#667eea',
+                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+        
+        // Gráfico de Mensajes
+        const messagesCtx = document.getElementById('messagesChart').getContext('2d');
+        const messagesChart = new Chart(messagesCtx, {
+            type: 'bar',
+            data: {
+                labels: chartData.weekly_messages.labels,
+                datasets: [{
+                    label: 'Mensajes',
+                    data: chartData.weekly_messages.data,
+                    backgroundColor: 'rgba(118, 75, 162, 0.8)',
+                    borderColor: '#764ba2',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+        
+        // Gráfico de Sentimientos
+        const sentimentCtx = document.getElementById('sentimentChart').getContext('2d');
+        const sentimentChart = new Chart(sentimentCtx, {
+            type: 'doughnut',
+            data: {
+                labels: Object.keys(chartData.sentiment_distribution || {}),
+                datasets: [{
+                    data: Object.values(chartData.sentiment_distribution || {}),
+                    backgroundColor: [
+                        '#28a745', // Positivo
+                        '#ffc107', // Neutral
+                        '#dc3545'  // Negativo
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+        
+        // Gráfico de Intenciones
+        const intentCtx = document.getElementById('intentChart').getContext('2d');
+        const intentChart = new Chart(intentCtx, {
+            type: 'horizontalBar',
+            data: {
+                labels: Object.keys(chartData.intent_distribution || {}),
+                datasets: [{
+                    label: 'Frecuencia',
+                    data: Object.values(chartData.intent_distribution || {}),
+                    backgroundColor: 'rgba(17, 153, 142, 0.8)',
+                    borderColor: '#11998e',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                indexAxis: 'y',
+                scales: {
+                    x: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+        
+        // Función para actualizar datos
+        function refreshData() {
+            fetch('/analytics/api/realtime-data')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        // Actualizar métricas
+                        document.getElementById('active-sessions').textContent = data.stats.active_sessions_last_24h || 0;
+                        document.getElementById('total-messages').textContent = data.stats.total_messages_today || 0;
+                        document.getElementById('escalation-rate').textContent = (data.stats.escalation_rate_today || 0).toFixed(1) + '%';
+                        document.getElementById('avg-response-time').textContent = Math.round(data.stats.avg_response_time_today || 0) + 'ms';
+                        
+                        console.log('Datos actualizados:', new Date().toLocaleTimeString());
+                    }
+                })
+                .catch(error => {
+                    console.error('Error actualizando datos:', error);
+                });
+        }
+        
+        // Auto-refresh cada 30 segundos
+        setInterval(refreshData, 30000);
+    </script>
+</body>
+</html>

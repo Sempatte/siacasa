@@ -6,62 +6,50 @@ import logging
 from typing import Dict, Any
 from flask import Flask, render_template, request, jsonify, session
 from flask_cors import CORS  # Necesitarás instalar flask-cors
+from dotenv import load_dotenv  # ← AGREGAR ESTA LÍNEA
 
 from bot_siacasa.domain.banks_config import BANK_CONFIGS
 from bot_siacasa.application.use_cases.procesar_mensaje_use_case import ProcesarMensajeUseCase
 from bot_siacasa.infrastructure.websocket.socketio_server import get_websocket_server as get_socketio_server
 import json
 
+load_dotenv()  # ← AGREGAR ESTA LÍNEA
 logger = logging.getLogger(__name__)
 
 
 class WebApp:
     """
-    Aplicación web Flask para interactuar con el chatbot.
+    Clase que encapsula la aplicación web Flask.
     """
     
-    def __init__(self, procesar_mensaje_use_case: ProcesarMensajeUseCase, chatbot_service):
+    def __init__(self, procesar_mensaje_use_case, chatbot_service):
         """
         Inicializa la aplicación web.
         
         Args:
             procesar_mensaje_use_case: Caso de uso para procesar mensajes
-            chatbot_service: Servicio de chatbot para gestionar conversaciones
+            chatbot_service: Servicio de chatbot
         """
+        self.app = Flask(__name__)
         self.procesar_mensaje_use_case = procesar_mensaje_use_case
         self.chatbot_service = chatbot_service
-        
-        # Crear aplicación Flask
-        self.app = Flask(
-            __name__,
-            template_folder=os.path.join(os.path.dirname(__file__), 'templates'),
-            static_folder=os.path.join(os.path.dirname(__file__), 'static')
-        )
-        # En web_app.py, actualiza la configuración CORS:
-
-        CORS(self.app, resources={
-            r"/api/*": {
-                "origins": [
-                    "https://www.bn.com.pe",  # Dominio del Banco de la Nación
-                    "https://bn.com.pe",
-                    "http://localhost:4040",  # Añadido para desarrollo local
-                    "http://127.0.0.1:4040",  # Alternativa para desarrollo local
-                    "http://localhost:3200",  # Puerto del embed.js
-                    "http://192.168.1.12:3200",  # IP local
-                    "http://localhost:*"      # Cualquier puerto en localhost
-                ],
-                "methods": ["GET", "POST", "OPTIONS"],
-                "allow_headers": ["Content-Type", "Authorization"],
-                "supports_credentials": True  # Importante: permite cookies entre dominios
-            }
-        })
-
-        # Configurar clave secreta para sesiones
         self.app.secret_key = os.getenv('FLASK_SECRET_KEY', os.urandom(24))
+
         
-        # Registrar rutas
+        # Configurar CORS para permitir solicitudes desde cualquier origen
+        CORS(self.app, resources={r"/api/*": {"origins": "*"}})
+        
+        # Registrar rutas principales
         self._register_routes()
-    
+        
+        # Importar y registrar rutas de métricas
+        try:
+            from .metrics_api import register_metrics_routes
+            register_metrics_routes(self.app)
+            logger.info("Rutas de métricas registradas exitosamente")
+        except ImportError as e:
+            logger.warning(f"No se pudieron cargar las rutas de métricas: {e}")
+
     def _register_routes(self) -> None:
         """
         Registra las rutas de la aplicación.
