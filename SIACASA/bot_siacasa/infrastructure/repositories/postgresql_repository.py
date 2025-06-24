@@ -93,7 +93,7 @@ class PostgreSQLRepository(IRepository):
             logger.error(f"Error obteniendo usuario {usuario_id}: {e}")
             return None
     
-    def guardar_conversacion(self, conversacion: Conversacion) -> None:
+    def guardar_conversacion(self, conversacion: Conversacion):
         """
         ✅ CLAVE: Guarda conversación Y mensajes en PostgreSQL.
         
@@ -122,8 +122,30 @@ class PostgreSQLRepository(IRepository):
             
             # 2. ✅ CRÍTICO: Guardar TODOS los mensajes en PostgreSQL
             if hasattr(conversacion, 'mensajes') and conversacion.mensajes:
-                for mensaje in conversacion.mensajes:
-                    self._guardar_mensaje(conversacion.id, mensaje)
+                with self.db.get_connection() as conn:
+                    with conn.cursor() as cur:
+                        # Borrar mensajes antiguos para luego insertar todos (estrategia simple)
+                        cur.execute("DELETE FROM mensajes WHERE conversacion_id = %s", (conversacion.id,))
+                        
+                        # Insertar todos los mensajes de nuevo
+                        for mensaje in conversacion.mensajes:
+                            cur.execute(
+                                """
+                                INSERT INTO mensajes (id, conversacion_id, role, content, timestamp, sentimental_score, processing_time_ms)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                """,
+                                (
+                                    mensaje.id,
+                                    conversacion.id,
+                                    mensaje.role,
+                                    mensaje.content,
+                                    mensaje.timestamp,
+                                    # Asegúrate de que estos valores se pasen
+                                    getattr(mensaje, 'sentimental_score', None),
+                                    getattr(mensaje, 'processing_time_ms', None)
+                                )
+                            )
+                        conn.commit()
             
             logger.info(f"✅ Conversación guardada en PostgreSQL: {conversacion.id} "
                        f"con {len(conversacion.mensajes)} mensajes")

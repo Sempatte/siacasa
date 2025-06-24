@@ -238,88 +238,59 @@ Características:
                 f"Error agregando mensaje asistente en {execution_time:.2f}ms: {e}")
             raise
 
-    def procesar_mensaje(self, usuario_id: str, texto: str, info_usuario: Dict = None) -> str:
+    def procesar_mensaje(self, usuario_id: str, texto_mensaje: str) -> str:
         """
-        🔥 MÉTODO PRINCIPAL OPTIMIZADO: Procesa mensajes con respuestas rápidas y cache.
+        Procesa un mensaje de un usuario, incluyendo análisis de sentimiento y tiempo de procesamiento.
         """
+        # --- INICIO DE LA MEDICIÓN ---
         start_time = time.perf_counter()
 
         try:
-            # 1. RESPUESTA INSTANTÁNEA si es posible
-            respuesta_rapida = self.obtener_respuesta_rapida(texto)
-            if respuesta_rapida:
-                # Agregar mensaje del usuario y respuesta al historial
-                self.agregar_mensaje_usuario(usuario_id, texto)
-                self.agregar_mensaje_asistente(usuario_id, respuesta_rapida)
+            # 1. Obtener o crear conversación
+            conversacion = self.repository.obtener_conversacion_por_usuario(usuario_id)
+            if not conversacion:
+                conversacion = Conversacion(usuario_id=usuario_id)
+            
+            # 2. Analizar sentimiento del mensaje del usuario ANTES de procesarlo
+            analisis = self.sentimiento_analyzer.execute(texto_mensaje)
+            sentimental_score = analisis.score if analisis else 0.0
 
-                execution_time = (time.perf_counter() - start_time) * 1000
-                logger.info(f"✅ Respuesta rápida en {execution_time:.2f}ms")
-                return respuesta_rapida
+            # 3. Generar respuesta de la IA
+            historial_mensajes = conversacion.obtener_historial_para_ia()
+            historial_mensajes.append({"role": "user", "content": texto_mensaje})
+            
+            respuesta_ia = self.ai_provider.generar_respuesta(historial_mensajes)
 
-            # 2. Verificar cache de respuestas
-            cache_key = self._generar_cache_key(usuario_id, texto)
-            if cache_key in self._response_cache:
-                cached_response = self._response_cache[cache_key]
-                execution_time = (time.perf_counter() - start_time) * 1000
-                logger.info(f"✅ Respuesta del cache en {execution_time:.2f}ms")
-                return cached_response
+            # --- FIN DE LA MEDICIÓN ---
+            end_time = time.perf_counter()
+            processing_time_ms = (end_time - start_time) * 1000
 
-            # 3. Obtener conversación existente
-            conversacion = self.obtener_o_crear_conversacion(usuario_id)
-
-            logger.info(
-                f"🔍 CONVERSACIÓN {usuario_id}: {len(conversacion.mensajes)} mensajes existentes")
-
-            # 4. Agregar mensaje del usuario
-            self.agregar_mensaje_usuario(usuario_id, texto)
-
-            # 5. Obtener historial optimizado (máximo 15 mensajes)
-            historial_completo = conversacion.obtener_historial()
-
-            # Limitar historial para optimizar velocidad
-            if len(historial_completo) > 15:
-                sistema_msgs = [
-                    m for m in historial_completo if m.get('role') == 'system']
-                otros_msgs = [
-                    m for m in historial_completo if m.get('role') != 'system']
-                historial_completo = sistema_msgs + \
-                    otros_msgs[-14:]  # Sistema + últimos 14
-
-            logger.info(
-                f"✅ Enviando {len(historial_completo)} mensajes a la IA")
-
-            # 6. Generar respuesta con IA
-            if not self.ai_provider:
-                logger.error("❌ AI provider no disponible")
-                return "Lo siento, estoy experimentando problemas técnicos."
-
-            respuesta = self.ai_provider.generar_respuesta(historial_completo)
-
-            # 7. Guardar respuesta del asistente
-            mensaje_respuesta = Mensaje(
-                role="assistant",
-                content=respuesta,
-                timestamp=datetime.now()
+            # 4. Crear y añadir los mensajes a la conversación CON LOS NUEVOS DATOS
+            mensaje_usuario = Mensaje(
+                role="user",
+                content=texto_mensaje,
+                sentimental_score=sentimental_score,
+                processing_time_ms=round(processing_time_ms)
             )
-            conversacion.agregar_mensaje(mensaje_respuesta)
+            
+            mensaje_bot = Mensaje(
+                role="assistant",
+                content=respuesta_ia
+            )
 
-            # 8. Guardar conversación y actualizar cache
+            conversacion.agregar_mensaje(mensaje_usuario)
+            conversacion.agregar_mensaje(mensaje_bot)
+            
+            # 5. Guardar la conversación completa en el repositorio
             self.repository.guardar_conversacion(conversacion)
-            self._conversation_cache[usuario_id] = conversacion
-
-            # 9. Agregar respuesta al cache
-            self._add_to_response_cache(cache_key, respuesta)
-
-            execution_time = (time.perf_counter() - start_time) * 1000
-            logger.info(f"✅ Respuesta IA generada en {execution_time:.2f}ms")
-
-            return respuesta
+            
+            logger.info(f"Mensaje procesado para {usuario_id} en {processing_time_ms:.2f}ms con score {sentimental_score:.2f}")
+            
+            return respuesta_ia
 
         except Exception as e:
-            execution_time = (time.perf_counter() - start_time) * 1000
-            logger.error(
-                f"❌ Error procesando mensaje en {execution_time:.2f}ms: {e}", exc_info=True)
-            return "Disculpa, ocurrió un error al procesar tu mensaje. ¿Puedes intentarlo de nuevo?"
+            logger.error(f"Error procesando mensaje para {usuario_id}: {e}", exc_info=True)
+            return "Lo siento, ocurrió un error inesperado al procesar tu mensaje."
 
     def _generar_cache_key(self, usuario_id: str, texto: str) -> str:
         """Genera clave de cache basada en el mensaje y contexto reciente"""
