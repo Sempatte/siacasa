@@ -122,7 +122,7 @@ class PostgreSQLRepository(IRepository):
             
             # 2. ✅ CRÍTICO: Guardar TODOS los mensajes en PostgreSQL
             if hasattr(conversacion, 'mensajes') and conversacion.mensajes:
-                with self.db.get_connection() as conn:
+                with self.db._get_connection() as conn:
                     with conn.cursor() as cur:
                         # Borrar mensajes antiguos para luego insertar todos (estrategia simple)
                         cur.execute("DELETE FROM mensajes WHERE conversacion_id = %s", (conversacion.id,))
