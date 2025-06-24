@@ -192,6 +192,10 @@ class EnvironmentConfig:
     # API Keys
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
     
+    # Configuración del servidor
+    HOST = os.getenv("HOST", "0.0.0.0")
+    PORT = int(os.getenv("PORT", "3200"))
+    
     # Base de datos
     DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///chatbot.db")
     
