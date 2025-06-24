@@ -54,15 +54,16 @@ class MetricsCollector:
     
     def record_message_sync(self, **kwargs):
         """
-        ✅ VERSIÓN CORREGIDA - Registra métricas en la BD
+        ✅ VERSIÓN CORREGIDA con retry y mejor timing
         """
+        import time
+        
         try:
             session_id = kwargs.get('session_id')
             processing_time_ms = kwargs.get('processing_time_ms', 0)
             ai_processing_time_ms = kwargs.get('ai_processing_time_ms', 0)
             user_message = kwargs.get('user_message', '')
             
-            # 🔧 MÉTODO CORREGIDO 1: Buscar por user_id directamente
             # Obtener user_id de la sesión
             session_info = self.db_connector.fetch_one("""
                 SELECT user_id FROM chat_sessions WHERE id = %s
@@ -74,15 +75,27 @@ class MetricsCollector:
                 
             user_id = session_info['user_id']
             
-            # Buscar el último mensaje de este usuario
-            last_message = self.db_connector.fetch_one("""
-                SELECT m.id, m.conversacion_id
-                FROM mensajes m
-                JOIN conversaciones c ON m.conversacion_id = c.id
-                WHERE c.usuario_id = %s
-                ORDER BY m.timestamp DESC
-                LIMIT 1
-            """, (user_id,))
+            # 🔧 RETRY LOGIC - Intentar varias veces con delay
+            max_retries = 3
+            last_message = None
+            
+            for attempt in range(max_retries):
+                # Buscar el último mensaje de este usuario
+                last_message = self.db_connector.fetch_one("""
+                    SELECT m.id, m.conversacion_id, m.content, m.timestamp
+                    FROM mensajes m
+                    JOIN conversaciones c ON m.conversacion_id = c.id
+                    WHERE c.usuario_id = %s
+                    ORDER BY m.timestamp DESC
+                    LIMIT 1
+                """, (user_id,))
+                
+                if last_message:
+                    break
+                    
+                if attempt < max_retries - 1:
+                    logger.debug(f"Intento {attempt + 1}: No se encontró mensaje, reintentando en 100ms...")
+                    time.sleep(0.1)  # Esperar 100ms antes del siguiente intento
             
             if last_message:
                 # ✅ ACTUALIZAR el mensaje con métricas
@@ -116,16 +129,62 @@ class MetricsCollector:
                     last_message['id']
                 ))
                 
-                logger.info(f"✅ Métricas guardadas: {processing_time_ms:.1f}ms (mensaje {last_message['id']}, filas: {rows_updated})")
+                logger.info(f"✅ Métricas guardadas: {processing_time_ms:.1f}ms (mensaje {last_message['id'][:8]}..., filas: {rows_updated})")
             else:
-                logger.warning(f"❌ No se encontró mensaje para usuario {user_id}")
+                # ❌ FALLBACK: Crear registro en tabla separada si el mensaje no se encuentra
+                logger.warning(f"❌ No se encontró mensaje para usuario {user_id[:8]}... después de {max_retries} intentos")
+                
+                # OPCIÓN: Guardar en tabla message_metrics como fallback
+                self._save_metrics_fallback(session_id, user_id, **kwargs)
             
-            # ✅ ACTUALIZAR métricas de la sesión
+            # ✅ ACTUALIZAR métricas de la sesión (esto siempre debe funcionar)
             self._update_session_metrics(session_id, processing_time_ms)
             
         except Exception as e:
             logger.error(f"❌ Error registrando métricas: {e}", exc_info=True)
+
+    def _save_metrics_fallback(self, session_id: str, user_id: str, **kwargs):
+        """
+        🆘 FALLBACK: Guardar métricas en tabla separada si no se encuentra el mensaje
+        """
+        try:
+            # Verificar si existe tabla message_metrics
+            table_exists = self.db_connector.fetch_one("""
+                SELECT COUNT(*) as count
+                FROM information_schema.tables 
+                WHERE table_name = 'message_metrics'
+            """)
+            
+            if table_exists and table_exists['count'] > 0:
+                # Guardar en tabla message_metrics
+                import uuid
+                self.db_connector.execute("""
+                    INSERT INTO message_metrics (
+                        id, session_id, user_message, bot_response,
+                        sentiment, processing_time_ms, ai_processing_time_ms,
+                        timestamp
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    str(uuid.uuid4()),
+                    session_id,
+                    kwargs.get('user_message', ''),
+                    kwargs.get('bot_response', ''),
+                    kwargs.get('sentiment', 'neutral'),
+                    kwargs.get('processing_time_ms', 0),
+                    kwargs.get('ai_processing_time_ms', 0),
+                    datetime.now()
+                ))
+                
+                logger.info(f"📊 Métricas guardadas en fallback table para usuario {user_id[:8]}...")
+            else:
+                # Log para debugging
+                logger.debug(f"🔍 Debug info - Usuario: {user_id}, Sesión: {session_id}")
+                
+        except Exception as e:
+            logger.error(f"Error en fallback metrics: {e}")
+            
     
+        
     def record_message_sync_alternative(self, **kwargs):
         """
         🔧 MÉTODO ALTERNATIVO: Guardar métricas por conversacion_id
