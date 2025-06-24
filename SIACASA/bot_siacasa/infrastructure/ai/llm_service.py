@@ -44,7 +44,7 @@ class LLMService:
         """
 
         response = self.client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "Eres un experto en NLU y análisis de sentimientos para el contexto bancario rural peruano."},
                 {"role": "user", "content": prompt}
@@ -95,7 +95,7 @@ class LLMService:
         """
 
         response = self.client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "Eres un asistente virtual de SIACASA, un banco rural en Perú."},
                 {"role": "user", "content": prompt}

@@ -388,7 +388,7 @@ def test_embedding():
         
         client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "Eres un asistente virtual bancario que responde basándose solo en el contexto proporcionado."},
                 {"role": "user", "content": prompt}

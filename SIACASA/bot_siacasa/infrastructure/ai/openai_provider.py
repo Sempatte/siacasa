@@ -18,13 +18,13 @@ class OpenAIProvider(IAProviderInterface):
     Incluye cache, timeouts y configuración optimizada para velocidad.
     """
     
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini"):
+    def __init__(self, api_key: str, model: str = "gpt-3.5-turbo"):
         """
         Inicializa el proveedor de OpenAI optimizado.
         
         Args:
             api_key: API key de OpenAI
-            model: Modelo de OpenAI a utilizar (por defecto gpt-4o-mini para velocidad)
+            model: Modelo de OpenAI a utilizar (por defecto gpt-3.5-turbo para velocidad)
         """
         self.model = model
         self.api_key = api_key

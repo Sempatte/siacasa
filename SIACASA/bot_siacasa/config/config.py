@@ -10,7 +10,7 @@ class OptimizedConfig:
     
     # === CONFIGURACIÓN DE OPENAI OPTIMIZADA ===
     OPENAI_CONFIG = {
-        "model": "gpt-4o-mini",      # Modelo más rápido
+        "model": "gpt-3.5-turbo",      # Modelo más rápido
         "max_tokens": 300,           # Respuestas más cortas = más rápidas
         "temperature": 0.3,          # Menos variabilidad = más consistente y rápido
         "top_p": 0.9,               # Reduce opciones = más rápido
@@ -217,7 +217,7 @@ class EnvironmentConfig:
     RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
     
     # Configuración de OpenAI
-    OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
     OPENAI_MAX_TOKENS = int(os.getenv("OPENAI_MAX_TOKENS", "300"))
     OPENAI_TEMPERATURE = float(os.getenv("OPENAI_TEMPERATURE", "0.3"))
     OPENAI_TIMEOUT = float(os.getenv("OPENAI_TIMEOUT", "8.0"))
