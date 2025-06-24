@@ -233,56 +233,8 @@ def main():
         app = get_app()
         
         # Mostrar estadísticas iniciales
-        stats = app.get_performance_stats()
-        print(f"✅ Aplicación lista - Tiempo promedio de respuesta: {stats['avg_response_time_ms']:.2f}ms")
-        
-        # Loop principal de CLI
-        print("\n=== SIACASA Chatbot Optimizado ===")
-        print("Escribe 'salir' para terminar, 'stats' para ver estadísticas, 'clean' para limpiar cache")
-        print("Optimizaciones activas: Cache, Respuestas Rápidas, Timeouts Agresivos\n")
-        
-        user_id = "cli_user"
-        
-        while True:
-            try:
-                user_input = input("\nTú: ").strip()
-                
-                if user_input.lower() in ['salir', 'exit', 'quit']:
-                    print("\n👋 ¡Hasta luego!")
-                    break
-                
-                if user_input.lower() == 'stats':
-                    stats = app.get_performance_stats()
-                    print(f"\n📊 Estadísticas:")
-                    print(f"   Total requests: {stats['total_requests']}")
-                    print(f"   Tiempo promedio: {stats['avg_response_time_ms']:.2f}ms")
-                    print(f"   Requests/segundo: {stats['requests_per_second']:.2f}")
-                    print(f"   Cache hit rate: {stats['cache_stats']['hit_rate_percent']:.1f}%")
-                    continue
-                
-                if user_input.lower() == 'clean':
-                    app.cleanup_caches()
-                    print("🧹 Caches limpiados")
-                    continue
-                
-                if not user_input:
-                    continue
-                
-                # Procesar mensaje
-                start_time = time.perf_counter()
-                response = app.process_message(user_id, user_input)
-                elapsed = (time.perf_counter() - start_time) * 1000
-                
-                print(f"\nSIACASA: {response}")
-                print(f"⚡ Tiempo de respuesta: {elapsed:.2f}ms")
-                
-            except KeyboardInterrupt:
-                print("\n\n👋 Saliendo...")
-                break
-            except Exception as e:
-                logger.error(f"Error en el loop principal: {e}")
-                print(f"❌ Error: {e}")
-    
+        #stats = app.get_performance_stats()
+
     except Exception as e:
         logger.error(f"Error fatal: {e}", exc_info=True)
         print(f"❌ Error fatal: {e}")
