@@ -154,10 +154,18 @@ class OpenAIProvider(IAProviderInterface):
                 logger.debug(f"  Mensaje #{i}: {role} - {content_preview}")
             
             # 5. Llamada a OpenAI con configuración optimizada
+            
+            # Preparamos los argumentos para la llamada a la API.
+            # Quitamos 'model' porque se pasa explícitamente y otros params no válidos.
+            api_params = self.config_optimized.copy()
+            api_params.pop('model', None)
+            api_params.pop('max_retries', None)
+            api_params.pop('api_key', None)
+
             response = openai.chat.completions.create(
                 model=self.model,
                 messages=mensajes_validados,
-                **self.config_optimized  # Usar configuración optimizada
+                **api_params  # Usar configuración optimizada y limpia
             )
             
             # 6. Extraer respuesta
