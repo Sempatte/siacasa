@@ -256,7 +256,7 @@ Características:
             sentimental_score = analisis.confianza if analisis else 0.0
 
             # 3. Generar respuesta de la IA
-            historial_mensajes = conversacion.obtener_historial_para_ia()
+            historial_mensajes = conversacion.obtener_historial()
             historial_mensajes.append({"role": "user", "content": texto_mensaje})
             
             respuesta_ia = self.ai_provider.generar_respuesta(historial_mensajes)
