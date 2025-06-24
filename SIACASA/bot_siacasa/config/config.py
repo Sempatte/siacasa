@@ -1,7 +1,8 @@
 # bot_siacasa/config/config.py
 import os
 from typing import Dict, Any
-
+from dotenv import load_dotenv
+load_dotenv()
 class OptimizedConfig:
     """
     Configuración optimizada para máximo rendimiento del chatbot.
