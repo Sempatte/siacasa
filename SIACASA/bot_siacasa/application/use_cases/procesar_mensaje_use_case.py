@@ -71,7 +71,7 @@ class ProcesarMensajeUseCase:
             # ⭐ CLAVE: Usar el método principal que mantiene contexto Y tiene optimizaciones
             respuesta = self.chatbot_service.procesar_mensaje(
                 usuario_id=usuario_id,
-                texto=mensaje_usuario,
+                texto_mensaje= mensaje_usuario,
                 info_usuario=info_usuario
             )
 
