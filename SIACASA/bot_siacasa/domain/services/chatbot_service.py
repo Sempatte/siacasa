@@ -247,7 +247,7 @@ Características:
 
         try:
             # 1. Obtener o crear conversación
-            conversacion = self.repository.obtener_conversacion_por_usuario(usuario_id)
+            conversacion = self.repository.obtener_conversacion_activa(usuario_id)
             if not conversacion:
                 conversacion = Conversacion(usuario_id=usuario_id)
             
