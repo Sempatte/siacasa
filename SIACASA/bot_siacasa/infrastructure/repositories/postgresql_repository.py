@@ -95,7 +95,8 @@ class PostgreSQLRepository(IRepository):
     
     def guardar_conversacion(self, conversacion: Conversacion):
         """
-        ✅ CLAVE: Guarda conversación Y mensajes en PostgreSQL.
+        ✅ MEJORADO: Guarda conversación sin borrar mensajes existentes.
+        Solo actualiza la metadata de la conversación.
         
         Args:
             conversacion: Conversación a guardar
@@ -120,85 +121,27 @@ class PostgreSQLRepository(IRepository):
                 json.dumps({"activa": conversacion.fecha_fin is None})
             ))
             
-            # 2. ✅ CRÍTICO: Guardar TODOS los mensajes en PostgreSQL
+            # 2. ✅ NO borramos mensajes existentes
+            # Solo guardamos mensajes que no tengan ID (nuevos)
             if hasattr(conversacion, 'mensajes') and conversacion.mensajes:
-                with self.db._get_connection() as conn:
-                    with conn.cursor() as cur:
-                        # Borrar mensajes antiguos para luego insertar todos (estrategia simple)
-                        cur.execute("DELETE FROM mensajes WHERE conversacion_id = %s", (conversacion.id,))
-                        
-                        # Insertar todos los mensajes de nuevo
-                        for mensaje in conversacion.mensajes:
-                            cur.execute(
-                                """
-                                INSERT INTO mensajes (id, conversacion_id, role, content, timestamp, sentimental_score, processing_time_ms)
-                                VALUES (%s, %s, %s, %s, %s, %s, %s)
-                                """,
-                                (
-                                    mensaje.id,
-                                    conversacion.id,
-                                    mensaje.role,
-                                    mensaje.content,
-                                    mensaje.timestamp,
-                                    # Asegúrate de que estos valores se pasen
-                                    getattr(mensaje, 'sentimental_score', None),
-                                    getattr(mensaje, 'processing_time_ms', None)
-                                )
-                            )
-                        conn.commit()
+                for mensaje in conversacion.mensajes:
+                    # Solo guardar mensajes sin ID (nuevos)
+                    if not hasattr(mensaje, 'id') or not mensaje.id:
+                        mensaje.id = str(uuid.uuid4())
+                        self._guardar_mensaje(conversacion.id, mensaje)
             
-            logger.info(f"✅ Conversación guardada en PostgreSQL: {conversacion.id} "
-                       f"con {len(conversacion.mensajes)} mensajes")
+            logger.info(f"✅ Conversación actualizada en PostgreSQL: {conversacion.id}")
                        
         except Exception as e:
             logger.error(f"❌ Error guardando conversación {conversacion.id}: {e}", exc_info=True)
             raise
+    
     def _guardar_mensaje_individual(self, conversacion_id: str, mensaje: Mensaje) -> None:
         """
-        ✅ Guarda un mensaje individual sin afectar otros mensajes.
-        
-        Args:
-            conversacion_id: ID de la conversación
-            mensaje: Mensaje a guardar
+        ✅ DEPRECATED: Usar _guardar_mensaje en su lugar.
+        Mantenido por compatibilidad.
         """
-        try:
-            # Generar ID si no existe
-            if not hasattr(mensaje, 'id') or mensaje.id is None:
-                mensaje.id = str(uuid.uuid4())
-            
-            # Usar UPSERT para evitar duplicados
-            self.db.execute("""
-                INSERT INTO mensajes (
-                    id, conversacion_id, role, content, 
-                    timestamp, sentimental_score, processing_time_ms
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (id) DO UPDATE SET
-                    content = EXCLUDED.content,
-                    timestamp = EXCLUDED.timestamp,
-                    sentimental_score = EXCLUDED.sentimental_score,
-                    processing_time_ms = EXCLUDED.processing_time_ms
-            """, (
-                mensaje.id,
-                conversacion_id,
-                mensaje.role,
-                mensaje.content,
-                mensaje.timestamp,
-                getattr(mensaje, 'sentimental_score', None),
-                getattr(mensaje, 'processing_time_ms', None)
-            ))
-            
-            # Actualizar contador de mensajes en la conversación
-            self.db.execute("""
-                UPDATE conversaciones 
-                SET cantidad_mensajes = cantidad_mensajes + 1
-                WHERE id = %s
-            """, (conversacion_id,))
-            
-            logger.debug(f"✅ Mensaje individual guardado: {mensaje.id}")
-            
-        except Exception as e:
-            logger.error(f"❌ Error guardando mensaje individual: {e}")
-            raise
+        self._guardar_mensaje(conversacion_id, mensaje)
     
     def _guardar_mensaje(self, conversacion_id: str, mensaje: Mensaje) -> None:
         """
@@ -266,20 +209,37 @@ class PostgreSQLRepository(IRepository):
                 json.dumps(metadata) if metadata else None
             ))
             
+            # Actualizar contador de mensajes si es un nuevo mensaje
+            self.db.execute("""
+                UPDATE conversaciones 
+                SET cantidad_mensajes = (
+                    SELECT COUNT(*) FROM mensajes WHERE conversacion_id = %s
+                )
+                WHERE id = %s
+            """, (conversacion_id, conversacion_id))
+            
             logger.debug(f"✅ Mensaje guardado con análisis completo: {mensaje.id}")
-            logger.debug(f"   - Sentiment: {getattr(mensaje, 'sentiment', 'N/A')} "
-                        f"({getattr(mensaje, 'sentiment_confidence', 0):.2f})")
-            logger.debug(f"   - Intent: {getattr(mensaje, 'intent', 'N/A')} "
-                        f"({getattr(mensaje, 'intent_confidence', 0):.2f})")
-            logger.debug(f"   - Tokens: {getattr(mensaje, 'token_count', 0)}")
-            logger.debug(f"   - Processing time: {getattr(mensaje, 'processing_time_ms', 0):.2f}ms")
+            
+            # Log de valores para debugging (con manejo de None)
+            sentiment = getattr(mensaje, 'sentiment', 'N/A')
+            sentiment_conf = getattr(mensaje, 'sentiment_confidence', 0) or 0
+            intent = getattr(mensaje, 'intent', 'N/A')
+            intent_conf = getattr(mensaje, 'intent_confidence', 0) or 0
+            tokens = getattr(mensaje, 'token_count', 0) or 0
+            proc_time = getattr(mensaje, 'processing_time_ms', 0) or 0
+            
+            logger.debug(f"   - Sentiment: {sentiment} ({sentiment_conf:.2f})")
+            logger.debug(f"   - Intent: {intent} ({intent_conf:.2f})")
+            logger.debug(f"   - Tokens: {tokens}")
+            logger.debug(f"   - Processing time: {proc_time:.2f}ms")
             
         except Exception as e:
             logger.error(f"❌ Error guardando mensaje individual: {e}", exc_info=True)
             raise
+    
     def obtener_conversacion(self, conversacion_id: str) -> Optional[Conversacion]:
         """
-        Obtiene una conversación de PostgreSQL.
+        Obtiene una conversación de PostgreSQL con TODOS los campos de los mensajes.
         
         Args:
             conversacion_id: ID de la conversación
@@ -314,9 +274,14 @@ class PostgreSQLRepository(IRepository):
                 fecha_fin=conv_data['fecha_fin']
             )
             
-            # ✅ Cargar mensajes de PostgreSQL
+            # ✅ Cargar mensajes con TODOS los campos
             mensajes_data = self.db.fetch_all("""
-                SELECT id, role, content, timestamp, metadata
+                SELECT 
+                    id, role, content, timestamp, metadata,
+                    sentiment, sentiment_score, sentiment_confidence,
+                    intent, intent_confidence, token_count,
+                    processing_time_ms, ai_processing_time_ms,
+                    response_tone
                 FROM mensajes 
                 WHERE conversacion_id = %s 
                 ORDER BY timestamp ASC
@@ -329,6 +294,25 @@ class PostgreSQLRepository(IRepository):
                     timestamp=msg_data['timestamp']
                 )
                 mensaje.id = msg_data['id']
+                
+                # Cargar todos los campos adicionales
+                mensaje.sentiment = msg_data.get('sentiment')
+                mensaje.sentiment_score = msg_data.get('sentiment_score')
+                mensaje.sentiment_confidence = msg_data.get('sentiment_confidence')
+                mensaje.intent = msg_data.get('intent')
+                mensaje.intent_confidence = msg_data.get('intent_confidence')
+                mensaje.token_count = msg_data.get('token_count')
+                mensaje.processing_time_ms = msg_data.get('processing_time_ms')
+                mensaje.ai_processing_time_ms = msg_data.get('ai_processing_time_ms')
+                mensaje.response_tone = msg_data.get('response_tone')
+                
+                # Cargar metadata
+                if msg_data.get('metadata'):
+                    try:
+                        mensaje.metadata = json.loads(msg_data['metadata'])
+                    except:
+                        mensaje.metadata = {}
+                
                 conversacion.mensajes.append(mensaje)
             
             logger.debug(f"Conversación cargada: {conversacion_id} con {len(conversacion.mensajes)} mensajes")

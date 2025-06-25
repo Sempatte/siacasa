@@ -418,6 +418,11 @@ Características:
             mensaje_usuario.token_count = token_count
             mensaje_usuario.response_tone = response_tone
             
+            mensaje_usuario.metadata.update({
+                "processing_time_ms": round(processing_time_ms),
+                "ai_processing_time_ms": round(ai_processing_time_ms)
+            })
+            
             # 12. ✅ Actualizar el mensaje del usuario en la BD con tiempos finales
             if hasattr(self.repository, '_guardar_mensaje'):
                 self.repository._guardar_mensaje(conversacion.id, mensaje_usuario)
