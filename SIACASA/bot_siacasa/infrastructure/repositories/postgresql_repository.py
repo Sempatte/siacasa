@@ -153,10 +153,9 @@ class PostgreSQLRepository(IRepository):
         except Exception as e:
             logger.error(f"❌ Error guardando conversación {conversacion.id}: {e}", exc_info=True)
             raise
-    
-    def _guardar_mensaje(self, conversacion_id: str, mensaje: Mensaje) -> None:
+    def _guardar_mensaje_individual(self, conversacion_id: str, mensaje: Mensaje) -> None:
         """
-        ✅ CRÍTICO: Guarda mensaje individual en PostgreSQL.
+        ✅ Guarda un mensaje individual sin afectar otros mensajes.
         
         Args:
             conversacion_id: ID de la conversación
@@ -164,31 +163,84 @@ class PostgreSQLRepository(IRepository):
         """
         try:
             # Generar ID si no existe
-            mensaje_id = getattr(mensaje, 'id', None) or str(uuid.uuid4())
+            if not hasattr(mensaje, 'id') or mensaje.id is None:
+                mensaje.id = str(uuid.uuid4())
             
+            # Usar UPSERT para evitar duplicados
             self.db.execute("""
                 INSERT INTO mensajes (
                     id, conversacion_id, role, content, 
-                    timestamp, metadata
-                ) VALUES (%s, %s, %s, %s, %s, %s)
+                    timestamp, sentimental_score, processing_time_ms
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (id) DO UPDATE SET
                     content = EXCLUDED.content,
+                    timestamp = EXCLUDED.timestamp,
+                    sentimental_score = EXCLUDED.sentimental_score,
+                    processing_time_ms = EXCLUDED.processing_time_ms
+            """, (
+                mensaje.id,
+                conversacion_id,
+                mensaje.role,
+                mensaje.content,
+                mensaje.timestamp,
+                getattr(mensaje, 'sentimental_score', None),
+                getattr(mensaje, 'processing_time_ms', None)
+            ))
+            
+            # Actualizar contador de mensajes en la conversación
+            self.db.execute("""
+                UPDATE conversaciones 
+                SET cantidad_mensajes = cantidad_mensajes + 1
+                WHERE id = %s
+            """, (conversacion_id,))
+            
+            logger.debug(f"✅ Mensaje individual guardado: {mensaje.id}")
+            
+        except Exception as e:
+            logger.error(f"❌ Error guardando mensaje individual: {e}")
+            raise
+    
+    def _guardar_mensaje(self, conversacion_id: str, mensaje: Mensaje) -> None:
+        """
+        ✅ Guarda un mensaje individual en PostgreSQL usando UPSERT.
+        
+        Args:
+            conversacion_id: ID de la conversación
+            mensaje: Mensaje a guardar
+        """
+        try:
+            # Asegurar que el mensaje tenga ID
+            if not hasattr(mensaje, 'id') or not mensaje.id:
+                mensaje.id = str(uuid.uuid4())
+            
+            # UPSERT: Insertar o actualizar
+            self.db.execute("""
+                INSERT INTO mensajes (
+                    id, conversacion_id, role, content, 
+                    timestamp, sentimental_score, processing_time_ms, metadata
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (id) DO UPDATE SET
+                    content = EXCLUDED.content,
+                    timestamp = EXCLUDED.timestamp,
+                    sentimental_score = EXCLUDED.sentimental_score,
+                    processing_time_ms = EXCLUDED.processing_time_ms,
                     metadata = EXCLUDED.metadata
             """, (
-                mensaje_id,
+                mensaje.id,
                 conversacion_id,
                 mensaje.role,
                 mensaje.content,
                 getattr(mensaje, 'timestamp', datetime.now()),
-                json.dumps({})
+                getattr(mensaje, 'sentimental_score', None),
+                getattr(mensaje, 'processing_time_ms', None),
+                json.dumps(getattr(mensaje, 'metadata', {}))
             ))
             
-            # Asignar ID al mensaje si no lo tenía
-            if not hasattr(mensaje, 'id'):
-                mensaje.id = mensaje_id
-                
+            logger.debug(f"✅ Mensaje guardado individualmente: {mensaje.id}")
+            
         except Exception as e:
-            logger.error(f"Error guardando mensaje: {e}")
+            logger.error(f"❌ Error guardando mensaje individual: {e}", exc_info=True)
+            raise
     
     def obtener_conversacion(self, conversacion_id: str) -> Optional[Conversacion]:
         """

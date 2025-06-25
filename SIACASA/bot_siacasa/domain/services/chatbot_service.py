@@ -167,77 +167,82 @@ Características:
     def agregar_mensaje_usuario(self, usuario_id: str, texto: str) -> Mensaje:
         """
         Agrega un mensaje del usuario a la conversación.
-        OPTIMIZADO: Medición de tiempo y validación de entrada.
         """
         start_time = time.perf_counter()
 
         try:
-            # Validación de entrada
+            # Validación
             if not texto or not texto.strip():
                 raise ValueError("El texto del mensaje no puede estar vacío")
 
             conversacion = self.obtener_o_crear_conversacion(usuario_id)
 
-            # Crear mensaje
+            # Crear mensaje con ID único
             mensaje = Mensaje(role="user", content=texto.strip())
+            mensaje.id = str(uuid.uuid4())
+            mensaje.timestamp = datetime.now()
 
-            # Agregar a la conversación
+            # Agregar a la conversación en memoria
             conversacion.agregar_mensaje(mensaje)
 
-            # OPTIMIZACIÓN: Limitar historial para evitar tokens excesivos
-            conversacion.limitar_historial(max_mensajes=15)
-
-            # Guardar la conversación actualizada
+            # ✅ IMPORTANTE: Guardar mensaje individual PRIMERO
+            # Esto asegura que el mensaje se guarde incluso si falla el guardado de la conversación
+            if hasattr(self.repository, '_guardar_mensaje'):
+                self.repository._guardar_mensaje(conversacion.id, mensaje)
+                logger.info(f"✅ Mensaje individual guardado: {mensaje.id}")
+            
+            # Luego actualizar la conversación completa
             self.repository.guardar_conversacion(conversacion)
 
             # Actualizar cache
             self._conversation_cache[usuario_id] = conversacion
 
             execution_time = (time.perf_counter() - start_time) * 1000
-            logger.debug(f"Mensaje usuario agregado en {execution_time:.2f}ms")
+            logger.info(f"✅ Mensaje usuario procesado en {execution_time:.2f}ms")
 
             return mensaje
 
         except Exception as e:
-            execution_time = (time.perf_counter() - start_time) * 1000
-            logger.error(
-                f"Error agregando mensaje usuario en {execution_time:.2f}ms: {e}")
+            logger.error(f"❌ Error agregando mensaje usuario: {e}")
             raise
-
+        
     def agregar_mensaje_asistente(self, usuario_id: str, texto: str) -> Mensaje:
         """
         Agrega un mensaje del asistente a la conversación.
-        OPTIMIZADO: Medición de tiempo y cache actualizado.
+        ✅ MEJORADO: Asegura que cada mensaje tenga un ID único.
         """
         start_time = time.perf_counter()
 
         try:
             conversacion = self.obtener_o_crear_conversacion(usuario_id)
 
-            # Crear mensaje
+            # Crear mensaje con ID único
             mensaje = Mensaje(role="assistant", content=texto)
+            mensaje.id = str(uuid.uuid4())  # ✅ Asignar ID inmediatamente
+            mensaje.timestamp = datetime.now()
 
             # Agregar a la conversación
             conversacion.agregar_mensaje(mensaje)
 
-            # Guardar la conversación actualizada
+            # ✅ Guardar mensaje individual primero (más seguro)
+            if hasattr(self.repository, '_guardar_mensaje_individual'):
+                self.repository._guardar_mensaje_individual(conversacion.id, mensaje)
+            
+            # Luego guardar la conversación completa
             self.repository.guardar_conversacion(conversacion)
 
             # Actualizar cache
             self._conversation_cache[usuario_id] = conversacion
 
             execution_time = (time.perf_counter() - start_time) * 1000
-            logger.debug(
-                f"Mensaje asistente agregado en {execution_time:.2f}ms")
+            logger.info(f"✅ Mensaje asistente agregado en {execution_time:.2f}ms - ID: {mensaje.id}")
 
             return mensaje
 
         except Exception as e:
             execution_time = (time.perf_counter() - start_time) * 1000
-            logger.error(
-                f"Error agregando mensaje asistente en {execution_time:.2f}ms: {e}")
+            logger.error(f"❌ Error agregando mensaje asistente en {execution_time:.2f}ms: {e}")
             raise
-    
     def _estimar_tokens(self, texto: str) -> int:
         """
         Estima el número de tokens en un texto.
@@ -297,6 +302,7 @@ Características:
     def procesar_mensaje(self, usuario_id: str, texto_mensaje: str) -> str:
         """
         Procesa un mensaje de un usuario, incluyendo análisis completo de sentimiento y métricas.
+        ✅ ACTUALIZADO: Usa los métodos optimizados para evitar pérdida de mensajes
         """
         # --- INICIO DE LA MEDICIÓN ---
         start_time = time.perf_counter()
@@ -305,9 +311,7 @@ Características:
 
         try:
             # 1. Obtener o crear conversación
-            conversacion = self.repository.obtener_conversacion_activa(usuario_id)
-            if not conversacion:
-                conversacion = Conversacion(usuario_id=usuario_id)
+            conversacion = self.obtener_o_crear_conversacion(usuario_id)
             
             # 2. Analizar sentimiento del mensaje del usuario ANTES de procesarlo
             analisis = self.sentimiento_analyzer.execute(texto_mensaje)
@@ -317,17 +321,40 @@ Características:
             sentiment_confidence = analisis.confianza if analisis else 0.5
             emociones = analisis.emociones if hasattr(analisis, 'emociones') else []
             
-            # 3. Analizar intent y entidades (si tienes un servicio de NLU, úsalo aquí)
-            # Por ahora, valores por defecto
+            # 3. Analizar intent y entidades
             intent = self._detectar_intent(texto_mensaje)
             intent_confidence = 0.8  # Valor por defecto
             
             # 4. Verificar si es una solicitud de escalación
             is_escalation_request = self._check_escalation_keywords(texto_mensaje)
             
-            # 5. Generar respuesta de la IA
+            # 5. ✅ NUEVO: Crear y guardar mensaje del usuario PRIMERO
+            mensaje_usuario = Mensaje(role="user", content=texto_mensaje)
+            mensaje_usuario.id = str(uuid.uuid4())
+            mensaje_usuario.timestamp = datetime.now()
+            
+            # Agregar datos de análisis al mensaje
+            mensaje_usuario.sentiment = sentiment
+            mensaje_usuario.sentiment_score = sentiment_confidence
+            mensaje_usuario.sentiment_confidence = sentiment_confidence
+            mensaje_usuario.intent = intent
+            mensaje_usuario.intent_confidence = intent_confidence
+            mensaje_usuario.is_escalation_request = is_escalation_request
+            mensaje_usuario.metadata = {
+                "emociones": emociones,
+                "usuario_id": usuario_id
+            }
+            
+            # ✅ Agregar mensaje a la conversación
+            conversacion.agregar_mensaje(mensaje_usuario)
+            
+            # ✅ IMPORTANTE: Guardar mensaje individual inmediatamente
+            if hasattr(self.repository, '_guardar_mensaje'):
+                self.repository._guardar_mensaje(conversacion.id, mensaje_usuario)
+                logger.debug(f"Mensaje usuario guardado individualmente: {mensaje_usuario.id}")
+            
+            # 6. Generar respuesta de la IA
             historial_mensajes = conversacion.obtener_historial()
-            historial_mensajes.append({"role": "user", "content": texto_mensaje})
             
             # Medir tiempo específico de IA
             ai_start_time = time.perf_counter()
@@ -335,60 +362,46 @@ Características:
             ai_end_time = time.perf_counter()
             ai_processing_time_ms = (ai_end_time - ai_start_time) * 1000
             
-            # 6. Contar tokens (aproximación simple)
+            # 7. Contar tokens y determinar tono
             token_count = self._estimar_tokens(texto_mensaje + respuesta_ia)
-            
-            # 7. Determinar tono de respuesta
             response_tone = self._determinar_tono_respuesta(sentiment, is_escalation_request)
 
             # --- FIN DE LA MEDICIÓN ---
             end_time = time.perf_counter()
             processing_time_ms = (end_time - start_time) * 1000
 
-            # 8. Crear y añadir los mensajes a la conversación CON TODOS LOS DATOS
-            mensaje_usuario = Mensaje(
-                role="user",
-                content=texto_mensaje,
-                conversacion_id=conversacion.id,
-                timestamp=datetime.now(),
-                # Campos de análisis
-                sentiment=sentiment,
-                sentiment_score=sentiment_confidence,  # Nota: usando sentiment_score para la confianza
-                sentiment_confidence=sentiment_confidence,
-                intent=intent,
-                intent_confidence=intent_confidence,
-                is_escalation_request=is_escalation_request,
-                # Métricas de procesamiento
-                processing_time_ms=round(processing_time_ms),
-                ai_processing_time_ms=round(ai_processing_time_ms),
-                token_count=token_count,
-                response_tone=response_tone,
-                # Metadata adicional
-                metadata={
-                    "emociones": emociones,
-                    "usuario_id": usuario_id
-                }
-            )
+            # 8. ✅ NUEVO: Crear y guardar mensaje del bot
+            mensaje_bot = Mensaje(role="assistant", content=respuesta_ia)
+            mensaje_bot.id = str(uuid.uuid4())
+            mensaje_bot.timestamp = datetime.now()
+            mensaje_bot.token_count = self._estimar_tokens(respuesta_ia)
+            mensaje_bot.metadata = {
+                "response_tone": response_tone,
+                "ai_processing_time_ms": round(ai_processing_time_ms)
+            }
             
-            mensaje_bot = Mensaje(
-                role="assistant",
-                content=respuesta_ia,
-                conversacion_id=conversacion.id,
-                timestamp=datetime.now(),
-                token_count=self._estimar_tokens(respuesta_ia),
-                metadata={
-                    "response_tone": response_tone
-                }
-            )
-
-            conversacion.agregar_mensaje(mensaje_usuario)
+            # ✅ Agregar mensaje del bot a la conversación
             conversacion.agregar_mensaje(mensaje_bot)
             
-            # 9. Guardar la conversación completa en el repositorio
+            # ✅ IMPORTANTE: Guardar mensaje del bot individualmente
+            if hasattr(self.repository, '_guardar_mensaje'):
+                self.repository._guardar_mensaje(conversacion.id, mensaje_bot)
+                logger.debug(f"Mensaje bot guardado individualmente: {mensaje_bot.id}")
+            
+            # 9. Actualizar métricas del mensaje usuario (tiempo total)
+            mensaje_usuario.processing_time_ms = round(processing_time_ms)
+            mensaje_usuario.ai_processing_time_ms = round(ai_processing_time_ms)
+            mensaje_usuario.token_count = token_count
+            mensaje_usuario.response_tone = response_tone
+            
+            # 10. ✅ Guardar la conversación completa (con el método actualizado que no borra)
             self.repository.guardar_conversacion(conversacion)
             
+            # 11. Actualizar cache
+            self._conversation_cache[usuario_id] = conversacion
+            
             logger.info(
-                f"Mensaje procesado para {usuario_id} en {processing_time_ms:.2f}ms "
+                f"✅ Mensaje procesado para {usuario_id} en {processing_time_ms:.2f}ms "
                 f"(IA: {ai_processing_time_ms:.2f}ms) | Sentimiento: {sentiment} ({sentiment_confidence:.2f}) | "
                 f"Intent: {intent} | Tokens: {token_count}"
             )
@@ -396,7 +409,7 @@ Características:
             return respuesta_ia
 
         except Exception as e:
-            logger.error(f"Error procesando mensaje para {usuario_id}: {e}", exc_info=True)
+            logger.error(f"❌ Error procesando mensaje para {usuario_id}: {e}", exc_info=True)
             return "Lo siento, ocurrió un error inesperado al procesar tu mensaje."
 
     def _generar_cache_key(self, usuario_id: str, texto: str) -> str:
