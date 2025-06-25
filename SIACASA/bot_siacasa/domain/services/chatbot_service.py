@@ -243,6 +243,7 @@ Características:
             execution_time = (time.perf_counter() - start_time) * 1000
             logger.error(f"❌ Error agregando mensaje asistente en {execution_time:.2f}ms: {e}")
             raise
+    
     def _estimar_tokens(self, texto: str) -> int:
         """
         Estima el número de tokens en un texto.
@@ -302,7 +303,7 @@ Características:
     def procesar_mensaje(self, usuario_id: str, texto_mensaje: str) -> str:
         """
         Procesa un mensaje de un usuario, incluyendo análisis completo de sentimiento y métricas.
-        ✅ ACTUALIZADO: Usa los métodos optimizados para evitar pérdida de mensajes
+        ✅ ACTUALIZADO: Guarda TODOS los campos de análisis correctamente
         """
         # --- INICIO DE LA MEDICIÓN ---
         start_time = time.perf_counter()
@@ -313,45 +314,66 @@ Características:
             # 1. Obtener o crear conversación
             conversacion = self.obtener_o_crear_conversacion(usuario_id)
             
-            # 2. Analizar sentimiento del mensaje del usuario ANTES de procesarlo
-            analisis = self.sentimiento_analyzer.execute(texto_mensaje)
+            # 2. Analizar sentimiento completo del mensaje del usuario
+            # Si ai_provider tiene análisis de sentimiento, usarlo
+            if hasattr(self.ai_provider, 'analizar_sentimiento'):
+                analysis_result = self.ai_provider.analizar_sentimiento(texto_mensaje)
+                sentiment = analysis_result.get("sentimiento", "neutral")
+                sentiment_confidence = float(analysis_result.get("confianza", 0.5))
+                emociones = analysis_result.get("emociones", [])
+                intent = analysis_result.get("intent", self._detectar_intent(texto_mensaje))
+                intent_confidence = float(analysis_result.get("intent_confidence", 0.7))
+                is_escalation_request = analysis_result.get("escalacion_requerida", False)
+                detected_entities = analysis_result.get("entidades", {})
+                suggested_tone = analysis_result.get("tono_sugerido", "professional")
+            else:
+                # Fallback: usar sentimiento_analyzer tradicional
+                analisis = self.sentimiento_analyzer.execute(texto_mensaje)
+                sentiment = analisis.sentimiento if analisis else "neutral"
+                sentiment_confidence = analisis.confianza if analisis else 0.5
+                emociones = analisis.emociones if hasattr(analisis, 'emociones') else []
+                intent = self._detectar_intent(texto_mensaje)
+                intent_confidence = 0.8
+                is_escalation_request = self._check_escalation_keywords(texto_mensaje)
+                detected_entities = {}
+                suggested_tone = "professional"
+                analysis_result = {
+                    "sentimiento": sentiment,
+                    "confianza": sentiment_confidence,
+                    "emociones": emociones,
+                    "intent": intent,
+                    "intent_confidence": intent_confidence,
+                    "entidades": detected_entities,
+                    "escalacion_requerida": is_escalation_request,
+                    "tono_sugerido": suggested_tone
+                }
             
-            # Extraer todos los datos del análisis
-            sentiment = analisis.sentimiento if analisis else "neutral"
-            sentiment_confidence = analisis.confianza if analisis else 0.5
-            emociones = analisis.emociones if hasattr(analisis, 'emociones') else []
-            
-            # 3. Analizar intent y entidades
-            intent = self._detectar_intent(texto_mensaje)
-            intent_confidence = 0.8  # Valor por defecto
-            
-            # 4. Verificar si es una solicitud de escalación
-            is_escalation_request = self._check_escalation_keywords(texto_mensaje)
-            
-            # 5. ✅ NUEVO: Crear y guardar mensaje del usuario PRIMERO
+            # 3. ✅ NUEVO: Crear mensaje del usuario con TODOS los campos de análisis
             mensaje_usuario = Mensaje(role="user", content=texto_mensaje)
             mensaje_usuario.id = str(uuid.uuid4())
             mensaje_usuario.timestamp = datetime.now()
             
-            # Agregar datos de análisis al mensaje
+            # Asignar TODOS los campos del análisis de sentimiento
             mensaje_usuario.sentiment = sentiment
-            mensaje_usuario.sentiment_score = sentiment_confidence
+            mensaje_usuario.sentiment_score = sentiment_confidence  # Para compatibilidad
             mensaje_usuario.sentiment_confidence = sentiment_confidence
             mensaje_usuario.intent = intent
             mensaje_usuario.intent_confidence = intent_confidence
             mensaje_usuario.is_escalation_request = is_escalation_request
             mensaje_usuario.metadata = {
-                "emociones": emociones,
-                "usuario_id": usuario_id
+                "analysis_result": analysis_result,
+                "detected_entities": detected_entities,
+                "suggested_tone": suggested_tone,
+                "emociones": emociones
             }
             
-            # ✅ Agregar mensaje a la conversación
+            # 4. Agregar mensaje a la conversación
             conversacion.agregar_mensaje(mensaje_usuario)
             
-            # ✅ IMPORTANTE: Guardar mensaje individual inmediatamente
+            # 5. ✅ IMPORTANTE: Guardar mensaje del usuario inmediatamente
             if hasattr(self.repository, '_guardar_mensaje'):
                 self.repository._guardar_mensaje(conversacion.id, mensaje_usuario)
-                logger.debug(f"Mensaje usuario guardado individualmente: {mensaje_usuario.id}")
+                logger.debug(f"Mensaje usuario guardado con análisis completo")
             
             # 6. Generar respuesta de la IA
             historial_mensajes = conversacion.obtener_historial()
@@ -362,7 +384,7 @@ Características:
             ai_end_time = time.perf_counter()
             ai_processing_time_ms = (ai_end_time - ai_start_time) * 1000
             
-            # 7. Contar tokens y determinar tono
+            # 7. Contar tokens y determinar tono de respuesta
             token_count = self._estimar_tokens(texto_mensaje + respuesta_ia)
             response_tone = self._determinar_tono_respuesta(sentiment, is_escalation_request)
 
@@ -370,40 +392,47 @@ Características:
             end_time = time.perf_counter()
             processing_time_ms = (end_time - start_time) * 1000
 
-            # 8. ✅ NUEVO: Crear y guardar mensaje del bot
+            # 8. ✅ Crear y guardar mensaje del bot
             mensaje_bot = Mensaje(role="assistant", content=respuesta_ia)
             mensaje_bot.id = str(uuid.uuid4())
             mensaje_bot.timestamp = datetime.now()
             mensaje_bot.token_count = self._estimar_tokens(respuesta_ia)
+            mensaje_bot.response_tone = response_tone
+            mensaje_bot.ai_processing_time_ms = round(ai_processing_time_ms)
             mensaje_bot.metadata = {
                 "response_tone": response_tone,
                 "ai_processing_time_ms": round(ai_processing_time_ms)
             }
             
-            # ✅ Agregar mensaje del bot a la conversación
+            # 9. Agregar mensaje del bot a la conversación
             conversacion.agregar_mensaje(mensaje_bot)
             
-            # ✅ IMPORTANTE: Guardar mensaje del bot individualmente
+            # 10. ✅ Guardar mensaje del bot individualmente
             if hasattr(self.repository, '_guardar_mensaje'):
                 self.repository._guardar_mensaje(conversacion.id, mensaje_bot)
                 logger.debug(f"Mensaje bot guardado individualmente: {mensaje_bot.id}")
             
-            # 9. Actualizar métricas del mensaje usuario (tiempo total)
+            # 11. ✅ Actualizar métricas finales del mensaje usuario
             mensaje_usuario.processing_time_ms = round(processing_time_ms)
             mensaje_usuario.ai_processing_time_ms = round(ai_processing_time_ms)
             mensaje_usuario.token_count = token_count
             mensaje_usuario.response_tone = response_tone
             
-            # 10. ✅ Guardar la conversación completa (con el método actualizado que no borra)
+            # 12. ✅ Actualizar el mensaje del usuario en la BD con tiempos finales
+            if hasattr(self.repository, '_guardar_mensaje'):
+                self.repository._guardar_mensaje(conversacion.id, mensaje_usuario)
+                logger.debug(f"Mensaje usuario actualizado con tiempos finales")
+            
+            # 13. Guardar la conversación completa
             self.repository.guardar_conversacion(conversacion)
             
-            # 11. Actualizar cache
+            # 14. Actualizar cache
             self._conversation_cache[usuario_id] = conversacion
             
             logger.info(
                 f"✅ Mensaje procesado para {usuario_id} en {processing_time_ms:.2f}ms "
                 f"(IA: {ai_processing_time_ms:.2f}ms) | Sentimiento: {sentiment} ({sentiment_confidence:.2f}) | "
-                f"Intent: {intent} | Tokens: {token_count}"
+                f"Intent: {intent} ({intent_confidence:.2f}) | Tokens: {token_count}"
             )
             
             return respuesta_ia

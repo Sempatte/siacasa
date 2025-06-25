@@ -202,28 +202,51 @@ class PostgreSQLRepository(IRepository):
     
     def _guardar_mensaje(self, conversacion_id: str, mensaje: Mensaje) -> None:
         """
-        ✅ Guarda un mensaje individual en PostgreSQL usando UPSERT.
+        ✅ Guarda un mensaje individual en PostgreSQL con TODOS los campos de análisis.
         
         Args:
             conversacion_id: ID de la conversación
-            mensaje: Mensaje a guardar
+            mensaje: Mensaje a guardar con todos sus campos de análisis
         """
         try:
             # Asegurar que el mensaje tenga ID
             if not hasattr(mensaje, 'id') or not mensaje.id:
                 mensaje.id = str(uuid.uuid4())
             
-            # UPSERT: Insertar o actualizar
+            # Extraer metadata si existe
+            metadata = getattr(mensaje, 'metadata', {})
+            
+            # UPSERT con TODOS los campos de análisis
             self.db.execute("""
                 INSERT INTO mensajes (
-                    id, conversacion_id, role, content, 
-                    timestamp, sentimental_score, processing_time_ms, metadata
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    id, 
+                    conversacion_id, 
+                    role, 
+                    content, 
+                    timestamp, 
+                    sentiment_score, 
+                    processing_time_ms,
+                    ai_processing_time_ms,
+                    sentiment,
+                    sentiment_confidence,
+                    intent,
+                    intent_confidence,
+                    token_count,
+                    response_tone,
+                    metadata
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (id) DO UPDATE SET
                     content = EXCLUDED.content,
                     timestamp = EXCLUDED.timestamp,
-                    sentimental_score = EXCLUDED.sentimental_score,
+                    sentiment_score = EXCLUDED.sentiment_score,
                     processing_time_ms = EXCLUDED.processing_time_ms,
+                    ai_processing_time_ms = EXCLUDED.ai_processing_time_ms,
+                    sentiment = EXCLUDED.sentiment,
+                    sentiment_confidence = EXCLUDED.sentiment_confidence,
+                    intent = EXCLUDED.intent,
+                    intent_confidence = EXCLUDED.intent_confidence,
+                    token_count = EXCLUDED.token_count,
+                    response_tone = EXCLUDED.response_tone,
                     metadata = EXCLUDED.metadata
             """, (
                 mensaje.id,
@@ -231,17 +254,29 @@ class PostgreSQLRepository(IRepository):
                 mensaje.role,
                 mensaje.content,
                 getattr(mensaje, 'timestamp', datetime.now()),
-                getattr(mensaje, 'sentimental_score', None),
+                getattr(mensaje, 'sentiment_score', None),
                 getattr(mensaje, 'processing_time_ms', None),
-                json.dumps(getattr(mensaje, 'metadata', {}))
+                getattr(mensaje, 'ai_processing_time_ms', metadata.get('ai_processing_time_ms')),
+                getattr(mensaje, 'sentiment', None),
+                getattr(mensaje, 'sentiment_confidence', None),
+                getattr(mensaje, 'intent', None),
+                getattr(mensaje, 'intent_confidence', None),
+                getattr(mensaje, 'token_count', None),
+                getattr(mensaje, 'response_tone', metadata.get('response_tone')),
+                json.dumps(metadata) if metadata else None
             ))
             
-            logger.debug(f"✅ Mensaje guardado individualmente: {mensaje.id}")
+            logger.debug(f"✅ Mensaje guardado con análisis completo: {mensaje.id}")
+            logger.debug(f"   - Sentiment: {getattr(mensaje, 'sentiment', 'N/A')} "
+                        f"({getattr(mensaje, 'sentiment_confidence', 0):.2f})")
+            logger.debug(f"   - Intent: {getattr(mensaje, 'intent', 'N/A')} "
+                        f"({getattr(mensaje, 'intent_confidence', 0):.2f})")
+            logger.debug(f"   - Tokens: {getattr(mensaje, 'token_count', 0)}")
+            logger.debug(f"   - Processing time: {getattr(mensaje, 'processing_time_ms', 0):.2f}ms")
             
         except Exception as e:
             logger.error(f"❌ Error guardando mensaje individual: {e}", exc_info=True)
             raise
-    
     def obtener_conversacion(self, conversacion_id: str) -> Optional[Conversacion]:
         """
         Obtiene una conversación de PostgreSQL.
