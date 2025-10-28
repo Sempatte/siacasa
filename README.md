@@ -4,7 +4,7 @@ Este proyecto implementa un sistema avanzado de chatbot con análisis de sentimi
 
 ## Características
 
-- **Chatbot inteligente**: Utiliza OpenAI GPT-4o para proporcionar respuestas precisas y personalizadas
+- **Chatbot inteligente**: Utiliza OpenAI GPT-3.5 para proporcionar respuestas precisas y personalizadas
 - **Análisis de sentimientos**: Detecta el estado emocional del usuario para adaptar las respuestas
 - **Múltiples interfaces**: Disponible como aplicación web y como widget integrable
 - **Soporte para formato Markdown**: Muestra texto enriquecido con negritas, listas numeradas y otros formatos
@@ -24,7 +24,7 @@ El proyecto sigue los principios de Clean Architecture con las siguientes capas:
 ## Requisitos
 
 - Python 3.8 o superior
-- API key de OpenAI
+- API key de OpenAI (solicitar token a [u201816293@upc.edu.pe](mailto:u201816293@upc.edu.pe))
 - Dependencias listadas en `requirements.txt`
 
 ## Instalación

@@ -12,6 +12,12 @@ BANK_CONFIGS = {
         "style": "casual",
         "allowed_domains": ["viabcp.com", "www.viabcp.com"]
     },
+    "caja_andes": {  # Caja de los Andes (demo)
+        "bank_name": "Caja de los Andes",
+        "greeting": "Hola, soy el asistente virtual de Caja de los Andes. Estoy listo para ayudarte.",
+        "style": "friendly",
+        "allowed_domains": ["cajadelosandes.pe", "demo.cajadelosandes.pe"]
+    },
     "default": {  # Configuración predeterminada
         "bank_name": "Banco",
         "greeting": "Hola, soy SIACASA, tu asistente bancario virtual. ¿En qué puedo ayudarte?",
