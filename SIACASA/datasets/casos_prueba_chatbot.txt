@@ -1,0 +1,200 @@
+================================================================================
+GUÍA DE CONOCIMIENTO PARA RESPUESTAS DEL CHATBOT SIACASA
+Uso interno del equipo de QA y Entrenamiento. Última actualización: 2025-01-15.
+================================================================================
+
+1. HORARIOS DE ATENCIÓN
+----------------------
+- Horario regular (días laborales L-V): lobby 09:00-18:00, caja 09:00-17:30, soporte telefónico 24/7.
+- Sábados: lobby 09:00-13:00, caja 09:00-12:30, soporte telefónico 24/7.
+- Domingos: oficinas cerradas, soporte telefónico 24/7.
+- Feriados nacionales 2025: 01/01, 29/03, 18/04, 01/05, 29/06, 28/07, 29/07, 08/10, 01/11, 08/12, 25/12.
+  * Feriado con atención parcial: 28/07 y 29/07 (horario reducido 10:00-13:00 en agencias principales).
+  * Restantes feriados: oficinas cerradas; se mantiene atención virtual y telefónica.
+- Mensaje sugerido día laboral: "Nuestros horarios son L-V de 9 a.m. a 6 p.m. y sábados de 9 a.m. a 1 p.m."
+- Mensaje sugerido feriado/cierre: "Por ser feriado nacional, la atención presencial está suspendida. Puedes usar nuestros canales digitales 24/7."
+
+2. AGENCIAS REGISTRADAS
+-----------------------
+Agencia Miraflores (código: AG-MIRA)
+  Dirección: Av. José Pardo 123, Miraflores, Lima.
+  Referencia: Frente al Parque Kennedy, edificio SIACASA Tower piso 1.
+  Servicios: caja, atención preferencial, módulo de autogestión, cajeros 24h.
+  Teléfono directo: (01) 600-1101.
+
+Agencia San Isidro (AG-SI)
+  Dirección: Av. Rivera Navarrete 845, San Isidro.
+  Referencia: Cruce con Av. Javier Prado, edificio Centro Empresarial.
+
+Agencia Arequipa Centro (AG-AQP)
+  Dirección: Calle Mercaderes 512, Arequipa.
+  Referencia: A media cuadra de la Plaza de Armas.
+
+Nota: para pruebas se asume "agencia X" = AG-MIRA.
+Respuesta base: indicar dirección, referencia, horarios y link a mapa https://goo.gl/maps/siacasa-miraflores.
+
+3. RECLAMOS REGISTRADOS (MUESTRA QA)
+------------------------------------
+- RC-12345: titular Juan Pérez, producto tarjeta de crédito Clásica, estado actual "En proceso", último movimiento 2025-01-10 14:32, agente asignado: Laura Gómez.
+- RC-56789: titular María Díaz, estado "Resuelto" el 2025-01-08, compensación aprobada S/150.
+Formato de respuesta:
+  "Tu reclamo RC-12345 se encuentra EN PROCESO. Nuestro equipo lo revisa y te contactará antes del 15/01."
+  "El reclamo RC-56789 fue RESUELTO el 08/01. Se envió confirmación a tu correo."
+
+4. BLOQUEO DE TARJETAS
+----------------------
+Canales disponibles:
+- App SIACASA (menú Tarjetas > Bloqueo inmediato).
+- Banca web (Configuración > Seguridad).
+- Central 24/7: 0-800-12345 (Perú) / +51 1 600-2222 (desde el extranjero).
+- Oficinas físicas durante horario laboral.
+
+Mensajes recomendados:
+- Fuera de horario: "Puedes bloquear tu tarjeta de inmediato desde la app SIACASA o llamando al 0-800-12345 disponible 24/7."
+- Dentro de horario: "¿Deseas que un agente te acompañe en el proceso? Puedo derivarte en este momento."
+- Pérdida/robo: añadir pasos para solicitar reposición (llega en 48 h hábiles a domicilio o agencia).
+
+5. GESTIÓN DE ENTRADAS NO ENTENDIDAS
+------------------------------------
+Respuesta inicial:
+  "Lo siento, no entendí tu consulta. ¿Podrías reformularla o decirme, por ejemplo, 'horarios', 'reclamos', 'tarjeta'?"
+Secuencia ante insistencia:
+  - Sugerir categorías: horarios de atención, transferencias, promociones, contacto.
+  - Ofrecer derivar a un agente humano tras 3 intentos fallidos.
+
+6. INFORMACIÓN SOBRE CRÉDITOS
+-----------------------------
+Requisitos generales créditos personales:
+- DNI vigente, mayores de 21 años.
+- Ingreso mínimo S/1,500 o boletas 3 últimos meses.
+- Historial crediticio en categoría "Normal".
+
+Opciones principales:
+- Crédito Libre Uso: tasas desde 16.5% TEA, plazos 12-60 meses.
+- Crédito Hipotecario: tasa referencial 9.9% TEA, hasta 90% del valor del inmueble.
+- Línea preaprobada se consulta en banca digital > Créditos > Evaluación.
+
+Mensajes tipo:
+  "Contamos con créditos de libre uso y créditos para vivienda. ¿Deseas que te envíe requisitos o un enlace para simular tu cuota?"
+
+7. TRANSFERENCIAS
+-----------------
+Proceso nacional:
+  1. Ingresar a banca digital.
+  2. Opción Transferencias > Nacionales.
+  3. Registrar cuenta destino (CCI o número de cuenta).
+  4. Confirmar con token digital.
+  Tiempo: inmediato si es SIACASA, máximo 24 h hábil interbancario.
+
+Proceso internacional:
+  1. Banca digital > Transferencias > Internacionales.
+  2. Datos requeridos: nombre beneficiario, banco, código SWIFT, país, dirección.
+  3. Adjuntar motivo económico (menú desplegable).
+  4. Comisión: USD 25, tiempo estimado 48-72 h hábiles.
+
+8. PREGUNTAS FRECUENTES (FAQ DESTACADAS)
+----------------------------------------
+- Horarios de agencias.
+- Requisitos para préstamos.
+- Canales digitales disponibles.
+- Procedimiento para reclamos.
+- Promociones vigentes.
+Responder listando 3-5 preguntas y ofrecer enlaces a https://siacasa.pe/faq.
+
+9. DERIVACIÓN A AGENTE HUMANO
+-----------------------------
+Condiciones:
+- Disponible L-V 09:00-18:00.
+- Se crea ticket con número STK-#### (incremental, ejemplo STK-2045).
+- Datos mínimos: nombre, DNI, motivo, canal preferido (chat o llamada).
+Mensaje:
+  "He creado el ticket STK-2045 y un agente te contactará en menos de 10 minutos."
+
+10. PRÉSTAMOS Y PRODUCTOS
+-------------------------
+- Préstamo personal: monto mínimo S/2,000, plazo máximo 60 meses, documentos: DNI, boletas, recibo de servicio.
+- Tarjeta de débito: requisitos DNI, ser mayor de edad, depósito inicial S/100.
+- Plazos fijos: montos desde S/1,000, plazos 30-360 días, tasa referencial 7.5% TEA, retiro anticipado anula intereses.
+
+11. CONTACTOS Y CANALES DIGITALES
+---------------------------------
+- Banca web: https://banca.siacasa.pe
+- Banca móvil: App Android/iOS "SIACASA Perú".
+- WhatsApp verificado: +51 987 654 321 (icono verde).
+- Correo soporte: soporte@siacasa.pe (respuesta en 24 h hábiles).
+- Número de atención general: (01) 600-3000.
+- Número de reclamos: (01) 600-3030 opción 2.
+
+12. SEGURIDAD DIGITAL
+---------------------
+Recomendaciones clave:
+- No compartir contraseñas ni códigos OTP.
+- Activar biometría en la app.
+- Revisar movimientos semanalmente.
+- Denunciar correos sospechosos a seguridad@siacasa.pe.
+
+13. ENCUESTA DE SATISFACCIÓN (NPS)
+----------------------------------
+- Se dispara cuando la conversación se marca como "resuelta".
+- Mensaje: "Antes de irte ¿nos calificas del 1 al 5? 1=No recomendaría, 5=Recomendaría totalmente."
+- Registro: puntuación, comentario opcional, fecha/hora, agente (si hubo).
+
+14. RECORDATORIOS DE PAGO
+-------------------------
+- Recordatorios disponibles en app: Menú Finanzas > Recordatorios > Agregar.
+- Configuración por fecha límite y canal (push o correo).
+- Respuesta tipo: "Puedes activar recordatorios desde la app siguiendo estos pasos..."
+
+15. PROMOCIONES ACTUALES (VIGENTES Q1 2025)
+-------------------------------------------
+- "Cashback Verano": 5% devolución en restaurantes (hasta S/100/mes) con tarjeta SIACASA Visa.
+- "Transferencias sin comisión": interbancarias gratis hasta 31/03/2025.
+- "Préstamo Express": tasa preferencial 14.9% TEA para clientes con NPS > 4.
+
+16. ESTADOS DE CUENTA
+---------------------
+- Se descargan desde banca digital > Documentos > Estados de cuenta.
+- Disponibles últimos 24 meses en PDF.
+- En app móvil: Perfil > Documentos.
+- Tiempo de generación: inmediato.
+
+17. PROCEDIMIENTO DE RECLAMOS
+-----------------------------
+Pasos oficiales:
+ 1. Completar formulario web o en agencia con datos personales, producto y descripción.
+ 2. Recepción de número de reclamo (ej. RC-12345).
+ 3. Plazo máximo de respuesta: 15 días hábiles (7 días para consumos no reconocidos).
+ 4. Seguimiento se realiza en el chatbot o llamando al (01) 600-3030 opción 2.
+
+18. ACTUALIZACIÓN DE DATOS
+--------------------------
+- Canales: agencia (con DNI), banca web (Perfil > Mis datos), app (Configuración > Datos personales).
+- Datos que se pueden actualizar: dirección, correo, celular, estado civil, ocupación.
+- Documentos requeridos: comprobante de domicilio vigente < 3 meses.
+
+19. COSTOS DE CUENTAS
+---------------------
+- Cuenta Ahorro Clásica: mantenimiento S/0 si se mantiene saldo promedio S/500; caso contrario S/8 mensual.
+- Cuenta Corriente Empresas: mantenimiento S/25 mensual, incluye 10 transferencias nacionales.
+- Tarjeta de débito reposición: S/25 por pérdida o robo.
+
+20. BANCOS DIGITALES Y ACTIVACIÓN
+---------------------------------
+- Activación banca digital: registrarse en https://banca.siacasa.pe/registro con DNI, tarjeta y OTP SMS.
+- App móvil exige token digital (se genera tras primer ingreso web).
+- Tutorial oficial: https://ayuda.siacasa.pe/activacion-digital.
+
+21. PREGUNTAS SOBRE CANALES DIGITALES
+-------------------------------------
+- Canales existentes: Banca web, App móvil, WhatsApp, Contact Center, Chatbot web.
+- Características:
+  * Banca web: operaciones completas.
+  * App: notificaciones en tiempo real.
+  * WhatsApp: consultas rápidas y bloqueo de tarjeta.
+
+22. SEGURIDAD ADICIONAL
+-----------------------
+- Protocolo antifraude: alertas push + SMS, confirmación doble factor.
+- Consejos: cambiar contraseña cada 90 días, revisar lista de dispositivos vinculados.
+
+

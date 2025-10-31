@@ -1,9 +1,11 @@
 # admin_panel/training/training_controller.py
 import os
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 import uuid
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app, jsonify, send_from_directory
+from io import BytesIO
+
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app, jsonify, send_from_directory, send_file
 from werkzeug.utils import secure_filename
 
 from admin_panel.auth.auth_middleware import login_required
@@ -11,6 +13,12 @@ from admin_panel.training.training_service import TrainingService
 from bot_siacasa.infrastructure.db.neondb_connector import NeonDBConnector
 from bot_siacasa.infrastructure.ai.training_manager import TrainingManager
 from openai import OpenAI
+
+try:
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment
+except ImportError:  # pragma: no cover
+    Workbook = None
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +39,24 @@ def allowed_file(filename):
     """
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+
+def _format_datetime(dt: datetime) -> str:
+    return dt.strftime('%d/%m/%Y %H:%M') if dt else '—'
+
+
+def _format_duration(start: datetime, end: datetime) -> str:
+    if not start or not end:
+        return "En progreso"
+    delta = end - start
+    total_seconds = int(delta.total_seconds())
+    if total_seconds < 60:
+        return f"{total_seconds}s"
+    minutes = total_seconds / 60
+    if minutes < 60:
+        return f"{minutes:.1f} min"
+    hours = minutes / 60
+    return f"{hours:.1f} h"
+
 @training_blueprint.route('/')
 @login_required
 def index():
@@ -45,12 +71,17 @@ def index():
     
     # Obtener historial de entrenamientos
     training_history = training_service.get_training_history(bank_code)
+    today = datetime.now().date()
+    default_start = (today - timedelta(days=7)).isoformat()
+    default_end = today.isoformat()
     
     return render_template(
         'training.html',
         bank_name=bank_name,
         training_files=training_files,
         training_history=training_history,
+        default_start_date=default_start,
+        default_end_date=default_end,
         user_name=session.get('user_name', 'Admin')
     )
 
@@ -108,6 +139,148 @@ def upload_file():
         flash('Error al subir el archivo. Por favor, intenta de nuevo.', 'danger')
         return redirect(url_for('training.index'))
 
+
+@training_blueprint.route('/export', methods=['POST'])
+@login_required
+def export_training_report():
+    """
+    Genera un reporte en Excel con el estado de los entrenamientos.
+    """
+    if Workbook is None:
+        flash('No se puede generar el reporte porque falta la librería openpyxl.', 'danger')
+        return redirect(url_for('training.index'))
+
+    try:
+        start_date_str = request.form.get('start_date')
+        end_date_str = request.form.get('end_date')
+
+        today = datetime.now()
+        default_start = today - timedelta(days=7)
+
+        start_dt = datetime.strptime(start_date_str, '%Y-%m-%d') if start_date_str else default_start
+        end_dt = datetime.strptime(end_date_str, '%Y-%m-%d') if end_date_str else today
+
+        # Asegurar rango válido y cubrir todo el día final
+        if start_dt > end_dt:
+            flash('La fecha de inicio no puede ser mayor que la fecha fin.', 'danger')
+            return redirect(url_for('training.index'))
+
+        start_dt = start_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_dt = end_dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+        bank_code = session.get('bank_code')
+        bank_name = session.get('bank_name', 'Banco')
+
+        sessions = training_service.get_training_sessions_by_range(bank_code, start_dt, end_dt)
+        if not sessions:
+            flash('No se encontraron sesiones de entrenamiento en el rango seleccionado.', 'warning')
+            return redirect(url_for('training.index'))
+
+        session_files = training_service.get_session_files_by_range(bank_code, start_dt, end_dt)
+
+        workbook = Workbook()
+        sheet_sessions = workbook.active
+        sheet_sessions.title = "Sesiones"
+
+        header = [
+            "Fecha inicio",
+            "Fecha fin",
+            "Duración",
+            "Estado",
+            "Archivos totales",
+            "Correctos",
+            "Con error",
+            "Iniciado por"
+        ]
+        sheet_sessions.append(header)
+
+        bold_font = Font(bold=True)
+        for cell in sheet_sessions[1]:
+            cell.font = bold_font
+            cell.alignment = Alignment(horizontal="center")
+
+        for session_row in sessions:
+            sheet_sessions.append([
+                _format_datetime(session_row.get('start_time')),
+                _format_datetime(session_row.get('end_time')),
+                _format_duration(session_row.get('start_time'), session_row.get('end_time')),
+                session_row.get('status', '').capitalize(),
+                session_row.get('files_count', 0),
+                session_row.get('success_count', 0),
+                session_row.get('error_count', 0),
+                session_row.get('initiated_by_name') or '—'
+            ])
+
+        # Ajustar ancho básico
+        for column_cells in sheet_sessions.columns:
+            max_length = max(len(str(cell.value)) if cell.value else 0 for cell in column_cells)
+            adjusted_width = max(15, max_length + 2)
+            sheet_sessions.column_dimensions[column_cells[0].column_letter].width = adjusted_width
+
+        sheet_files = workbook.create_sheet("Archivos por sesión")
+        files_header = [
+            "Sesión",
+            "Fecha inicio",
+            "Estado sesión",
+            "Archivo",
+            "Tipo",
+            "Tamaño (KB)",
+            "Estado archivo",
+            "Mensaje de error",
+            "Procesado el"
+        ]
+        sheet_files.append(files_header)
+        for cell in sheet_files[1]:
+            cell.font = bold_font
+            cell.alignment = Alignment(horizontal="center")
+
+        for detail in session_files:
+            size_kb = round((detail.get('file_size') or 0) / 1024, 1)
+            sheet_files.append([
+                detail.get('session_id'),
+                _format_datetime(detail.get('start_time')),
+                detail.get('session_status', '').capitalize(),
+                detail.get('original_filename'),
+                detail.get('file_type'),
+                size_kb,
+                detail.get('file_status', '').capitalize(),
+                detail.get('error_message') or '',
+                _format_datetime(detail.get('processed_at'))
+            ])
+
+        for column_cells in sheet_files.columns:
+            max_length = max(len(str(cell.value)) if cell.value else 0 for cell in column_cells)
+            adjusted_width = max(15, max_length + 2)
+            sheet_files.column_dimensions[column_cells[0].column_letter].width = adjusted_width
+
+        metadata_sheet = workbook.create_sheet("Resumen")
+        metadata_sheet.append(["Banco", bank_name])
+        metadata_sheet.append(["Código", bank_code])
+        metadata_sheet.append(["Rango", f"{start_dt.date()} a {end_dt.date()}"])
+        metadata_sheet.append(["Sesiones exportadas", len(sessions)])
+        metadata_sheet.append(["Fecha de generación", _format_datetime(datetime.now())])
+        for cell in metadata_sheet['A'][:5]:
+            cell.font = bold_font
+
+        output = BytesIO()
+        workbook.save(output)
+        output.seek(0)
+
+        filename = f"reporte_entrenamiento_{bank_code}_{start_dt.date()}_{end_dt.date()}.xlsx"
+        return send_file(
+            output,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            download_name=filename,
+            as_attachment=True
+        )
+
+    except ValueError:
+        flash('Formato de fecha inválido. Usa el formato AAAA-MM-DD.', 'danger')
+        return redirect(url_for('training.index'))
+    except Exception as e:
+        logger.error(f"Error al exportar reporte de entrenamiento: {e}", exc_info=True)
+        flash('Ocurrió un error al generar el reporte. Inténtalo más tarde.', 'danger')
+        return redirect(url_for('training.index'))
 @training_blueprint.route('/file/<file_id>/process', methods=['POST'])
 @login_required
 def process_file(file_id):

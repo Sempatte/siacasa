@@ -18,6 +18,7 @@ from bot_siacasa.config.config import OptimizedConfig, EnvironmentConfig, get_op
 from bot_siacasa.domain.services.chatbot_service import ChatbotService
 from bot_siacasa.domain.services.response_cache_service import get_cache_service
 from bot_siacasa.infrastructure.ai.openai_provider import OpenAIProvider
+from bot_siacasa.infrastructure.ai.knowledge_base_service import KnowledgeBaseService
 from bot_siacasa.infrastructure.repositories.postgresql_repository import PostgreSQLRepository
 from bot_siacasa.application.use_cases.procesar_mensaje_use_case import ProcesarMensajeUseCase
 from bot_siacasa.application.use_cases.analizar_sentimiento_use_case import AnalizarSentimientoUseCase
@@ -36,6 +37,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+BANK_PROFILES = {
+    "bn": {
+        "bank_name": "Banco de la Nación (Demo)",
+        "style": "formal",
+        "greeting": "Hola, soy el asistente virtual del Banco de la Nación. ¿En qué puedo ayudarte hoy?",
+        "identity_statement": (
+            "Representas al Banco de la Nación del Perú en un entorno de pruebas QA. "
+            "Debes ofrecer información oficial sobre agencias, horarios, canales y servicios, "
+            "y nunca indicar que careces de afiliación bancaria."
+        )
+    }
+}
+
 
 class OptimizedChatbotApp:
     """
@@ -49,7 +63,11 @@ class OptimizedChatbotApp:
         
         # Componentes principales
         self.repository = None
+        self.repository_backend = "uninitialized"
+        self.persistence_enabled = False
+        self.repository_error = None
         self.ai_provider = None
+        self.knowledge_service = None
         self.chatbot_service = None
         self.procesar_mensaje_use_case = None
         
@@ -66,9 +84,43 @@ class OptimizedChatbotApp:
         
         try:
             # 1. Inicializar conector de base de datos y repositorio PERSISTENTE
-            db_connector = NeonDBConnector()
-            self.repository = PostgreSQLRepository(db_connector)
-            logger.info("✅ PostgreSQL Repository inicializado")
+            neon_disabled = EnvironmentConfig.DISABLE_NEONDB or EnvironmentConfig.USE_MEMORY_REPOSITORY
+            repo_issue = None
+
+            if neon_disabled:
+                repo_issue = "NeonDB deshabilitado por configuración"
+                logger.warning("NeonDB deshabilitado vía variable de entorno. Se utilizará el repositorio en memoria.")
+            else:
+                try:
+                    db_connector = NeonDBConnector(
+                        connect_timeout=EnvironmentConfig.NEONDB_CONNECT_TIMEOUT
+                    )
+                    self.repository = PostgreSQLRepository(db_connector)
+                    self.repository_backend = "postgresql"
+                    self.persistence_enabled = True
+                    self.repository_error = None
+                    logger.info("✅ PostgreSQL Repository inicializado")
+                except Exception as db_error:
+                    repo_issue = f"{db_error.__class__.__name__}: {db_error}"
+                    self.repository_error = repo_issue
+                    logger.warning(
+                        "No se pudo conectar a NeonDB. Se usará repositorio en memoria. Detalle: %s",
+                        db_error,
+                        exc_info=True
+                    )
+
+            if self.repository is None:
+                from bot_siacasa.infrastructure.repositories.memory_repository import MemoryRepository
+
+                self.repository = MemoryRepository()
+                self.repository_backend = "memory"
+                self.persistence_enabled = False
+                self.repository_error = repo_issue
+                logger.warning(
+                    "⚠️ Usando repositorio en memoria (sin persistencia). Motivo: %s",
+                    repo_issue or "no se proporcionó"
+                )
+
             
             # 2. Inicializar proveedor de IA con configuración optimizada
             if not EnvironmentConfig.OPENAI_API_KEY:
@@ -81,20 +133,56 @@ class OptimizedChatbotApp:
             # Aplicar configuración optimizada
             self.ai_provider.update_config(**self.config["openai"])
             logger.info(f"✅ OpenAI Provider inicializado con modelo {self.config['openai']['model']}")
+
+            # 2b. Inicializar servicio de conocimiento vectorial si hay persistencia
+            if self.persistence_enabled and isinstance(self.repository, PostgreSQLRepository):
+                try:
+                    default_bank_code = getattr(EnvironmentConfig, "BANK_CODE", "default")
+                    self.knowledge_service = KnowledgeBaseService(
+                        db_connector=self.repository.db,
+                        ai_provider=self.ai_provider,
+                        default_bank_code=default_bank_code or "default"
+                    )
+                    logger.info("✅ KnowledgeBaseService inicializado")
+                except Exception as kb_error:
+                    self.knowledge_service = None
+                    logger.warning(
+                        "No se pudo inicializar el KnowledgeBaseService. Se continuará sin contexto enriquecido. Detalle: %s",
+                        kb_error,
+                        exc_info=True
+                    )
+            else:
+                self.knowledge_service = None
+                logger.warning("Knowledge base deshabilitada (sin base de datos persistente disponible).")
             
             # 3. Inicializar analizador de sentimientos
             sentiment_analyzer = AnalizarSentimientoUseCase(self.ai_provider)
             logger.info("✅ Sentiment Analyzer inicializado")
             
             # 4. Inicializar servicio principal del chatbot
+            bank_code = getattr(EnvironmentConfig, "BANK_CODE", "default")
+            bank_profile = BANK_PROFILES.get(bank_code.lower(), {})
+            default_bank_name = bank_profile.get("bank_name", "SIACASA Bank")
+            bank_config = {
+                "bank_name": default_bank_name,
+                "style": bank_profile.get("style", "professional"),
+                "greeting": bank_profile.get(
+                    "greeting",
+                    "Hola, soy tu asistente virtual bancario. ¿En qué puedo ayudarte hoy?"
+                ),
+                "identity_statement": bank_profile.get(
+                    "identity_statement",
+                    f"Representas al banco {default_bank_name} para resolver consultas oficiales."
+                ),
+                "bank_code": bank_code
+            }
+
             self.chatbot_service = ChatbotService(
                 repository=self.repository,
                 sentimiento_analyzer=sentiment_analyzer,
                 ai_provider=self.ai_provider,
-                bank_config={
-                    "bank_name": "SIACASA Bank",
-                    "style": "professional"
-                }
+                bank_config=bank_config,
+                knowledge_service=self.knowledge_service
             )
             logger.info("✅ ChatbotService inicializado")
             
@@ -166,7 +254,11 @@ class OptimizedChatbotApp:
             "avg_response_time_ms": round(avg_response_time, 2),
             "requests_per_second": round(self.total_requests / max(uptime, 1), 2),
             "cache_stats": self.cache_service.get_stats(),
-            "ai_provider_stats": self.ai_provider.get_cache_stats() if hasattr(self.ai_provider, 'get_cache_stats') else {}
+            "ai_provider_stats": self.ai_provider.get_cache_stats() if hasattr(self.ai_provider, 'get_cache_stats') else {},
+            "repository_backend": self.repository_backend,
+            "persistence_enabled": self.persistence_enabled,
+            "knowledge_base_enabled": self.knowledge_service is not None,
+            "repository_issue": self.repository_error
         }
 
     def _update_metrics(self, response_time_ms: float) -> None:
@@ -199,16 +291,33 @@ def main():
     try:
         # Inicializar aplicación
         app = get_app()
+
+        if not app.persistence_enabled:
+            logger.warning("La aplicación se está ejecutando sin persistencia de NeonDB.")
+            print("⚠️ NeonDB no disponible o deshabilitado. Usando repositorio en memoria (los datos no se persistirán).")
         
         # Crear la aplicación web Flask
         web_app_instance = WebApp(app.procesar_mensaje_use_case, app.chatbot_service)
         
         # Inicializar el repositorio de soporte para Socket.IO
-        db_connector = NeonDBConnector()
-        support_repository = SupportRepository(db_connector)
+        support_repository = None
+        if app.persistence_enabled and isinstance(app.repository, PostgreSQLRepository):
+            try:
+                support_repository = SupportRepository(app.repository.db)
+                logger.info("Repositorio de soporte inicializado utilizando NeonDB.")
+            except Exception as support_error:
+                logger.warning(
+                    "No se pudo inicializar el repositorio de soporte. El chat en vivo funcionará sin persistencia. Detalle: %s",
+                    support_error,
+                    exc_info=True
+                )
+        else:
+            logger.warning("Repositorio de soporte deshabilitado porque no hay base de datos persistente disponible.")
         
         # Inicializar el servidor Socket.IO
         socketio_server = init_socketio_server(web_app_instance.app, support_repository)
+        if support_repository is None:
+            logger.warning("Socket.IO se ejecutará sin soporte para tickets persistentes.")
         
         # Usar la configuración de config.py para el puerto y host
         host = EnvironmentConfig.HOST

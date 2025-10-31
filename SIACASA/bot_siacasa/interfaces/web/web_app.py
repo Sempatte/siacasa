@@ -185,10 +185,9 @@ class WebApp:
                 conversacion = self.chatbot_service.obtener_o_crear_conversacion(usuario_id)
 
                 # NUEVO: Asegurarse de que la conversación tenga el bank_code en sus metadatos
-                if hasattr(conversacion, 'metadata'):
-                    conversacion.metadata['bank_code'] = bank_code
-                elif hasattr(conversacion, 'metadata') and conversacion.metadata is None:
-                    conversacion.metadata = {'bank_code': bank_code}
+                if not getattr(conversacion, 'metadata', None):
+                    conversacion.metadata = {}
+                conversacion.metadata['bank_code'] = bank_code
 
                 # Guardar la conversación con los metadatos actualizados
                 self.chatbot_service.repository.guardar_conversacion(conversacion)

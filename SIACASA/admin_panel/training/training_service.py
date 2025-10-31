@@ -3,7 +3,7 @@ import os
 import uuid
 import logging
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from werkzeug.utils import secure_filename
 
 logger = logging.getLogger(__name__)
@@ -95,6 +95,62 @@ class TrainingService:
         """
         
         return self.db.fetch_all(query, (bank_code,))
+    
+    def get_training_sessions_by_range(
+        self,
+        bank_code: str,
+        start_date: datetime,
+        end_date: datetime
+    ) -> List[Dict[str, Any]]:
+        """
+        Obtiene sesiones de entrenamiento dentro de un rango de fechas.
+        """
+        query = """
+        SELECT 
+            ts.id,
+            ts.status,
+            ts.files_count,
+            ts.success_count,
+            ts.error_count,
+            ts.start_time,
+            ts.end_time,
+            au.name AS initiated_by_name
+        FROM training_sessions ts
+        LEFT JOIN admin_users au ON ts.initiated_by = au.id
+        WHERE ts.bank_code = %s
+          AND ts.start_time BETWEEN %s AND %s
+        ORDER BY ts.start_time ASC
+        """
+        return self.db.fetch_all(query, (bank_code, start_date, end_date))
+
+    def get_session_files_by_range(
+        self,
+        bank_code: str,
+        start_date: datetime,
+        end_date: datetime
+    ) -> List[Dict[str, Any]]:
+        """
+        Obtiene el detalle de archivos por sesión dentro de un rango de fechas.
+        """
+        query = """
+        SELECT 
+            tsf.session_id,
+            tsf.status AS file_status,
+            tsf.error_message,
+            tsf.processed_at,
+            tf.original_filename,
+            tf.file_type,
+            tf.file_size,
+            ts.start_time,
+            ts.status AS session_status
+        FROM training_session_files tsf
+        JOIN training_sessions ts ON ts.id = tsf.session_id
+        JOIN training_files tf ON tf.id = tsf.file_id
+        WHERE ts.bank_code = %s
+          AND ts.start_time BETWEEN %s AND %s
+        ORDER BY ts.start_time ASC, tsf.file_id
+        """
+        return self.db.fetch_all(query, (bank_code, start_date, end_date))
     
     def save_training_file(self, file, description: str, user_id: str, bank_code: str) -> Dict[str, Any]:
         """

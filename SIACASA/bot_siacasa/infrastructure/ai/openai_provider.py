@@ -73,6 +73,24 @@ class OpenAIProvider(IAProviderInterface):
             del cache_dict[oldest_key]
         
         cache_dict[key] = value
+
+    def generar_embedding(self, texto: str, modelo: str = "text-embedding-3-small") -> Optional[List[float]]:
+        """
+        Genera un embedding para el texto proporcionado utilizando OpenAI.
+        """
+        if not texto or not texto.strip():
+            return None
+
+        try:
+            response = openai.embeddings.create(
+                model=modelo,
+                input=texto
+            )
+            embedding = response.data[0].embedding
+            return embedding
+        except Exception as e:
+            logger.error(f"Error generando embedding con OpenAI: {e}", exc_info=True)
+            return None
     
     def analizar_sentimiento(self, texto: str) -> Dict:
         """

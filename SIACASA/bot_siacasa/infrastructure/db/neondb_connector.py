@@ -13,7 +13,15 @@ class NeonDBConnector:
     Conector para la base de datos PostgreSQL en NeonDB.
     """
     
-    def __init__(self, host=None, database=None, user=None, password=None):
+    def __init__(
+        self,
+        host=None,
+        database=None,
+        user=None,
+        password=None,
+        connect_timeout: Optional[int] = None,
+        sslmode: Optional[str] = None
+    ):
         """
         Inicializa el conector con las credenciales de conexión.
         Utiliza variables de entorno si no se proporcionan parámetros.
@@ -23,11 +31,15 @@ class NeonDBConnector:
             database: Nombre de la base de datos
             user: Usuario
             password: Contraseña
+            connect_timeout: Timeout (en segundos) para la conexión
+            sslmode: Modo SSL a utilizar (por defecto 'require' para Neon)
         """
         self.host = host or os.getenv("NEONDB_HOST")
         self.database = database or os.getenv("NEONDB_DATABASE")
         self.user = user or os.getenv("NEONDB_USER")
         self.password = password or os.getenv("NEONDB_PASSWORD")
+        self.connect_timeout = connect_timeout or int(os.getenv("NEONDB_CONNECT_TIMEOUT", "5"))
+        self.sslmode = sslmode or os.getenv("NEONDB_SSLMODE", "require")
         
         # Verificar que se proporcionaron todas las credenciales
         if not all([self.host, self.database, self.user, self.password]):
@@ -45,11 +57,20 @@ class NeonDBConnector:
             Conexión a la base de datos
         """
         try:
+            logger.debug(
+                "Conectando a NeonDB %s (db=%s) con timeout %ss y sslmode=%s",
+                self.host,
+                self.database,
+                self.connect_timeout,
+                self.sslmode
+            )
             connection = psycopg2.connect(
                 host=self.host,
                 database=self.database,
                 user=self.user,
-                password=self.password
+                password=self.password,
+                connect_timeout=self.connect_timeout,
+                sslmode=self.sslmode
             )
             return connection
         except Exception as e:

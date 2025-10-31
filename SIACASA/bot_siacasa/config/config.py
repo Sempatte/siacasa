@@ -195,6 +195,7 @@ class EnvironmentConfig:
     # Configuración del servidor
     HOST = os.getenv("HOST", "0.0.0.0")
     PORT = int(os.getenv("PORT", "3200"))
+    BANK_CODE = os.getenv("BANK_CODE", "default")
     
     # Base de datos
     DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///chatbot.db")
@@ -215,6 +216,11 @@ class EnvironmentConfig:
     # Límites de rendimiento
     MAX_CONCURRENT_REQUESTS = int(os.getenv("MAX_CONCURRENT_REQUESTS", "10"))
     RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
+
+    # Configuración de repositorio/NeonDB
+    NEONDB_CONNECT_TIMEOUT = int(os.getenv("NEONDB_CONNECT_TIMEOUT", "5"))
+    USE_MEMORY_REPOSITORY = os.getenv("USE_MEMORY_REPOSITORY", "False").lower() == "true"
+    DISABLE_NEONDB = os.getenv("DISABLE_NEONDB", "False").lower() == "true"
     
     # Configuración de OpenAI
     OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")

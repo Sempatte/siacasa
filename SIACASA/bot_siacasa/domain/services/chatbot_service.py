@@ -32,15 +32,75 @@ class ChatbotService:
 
     # Respuestas instantáneas para casos comunes
     RESPUESTAS_RAPIDAS = {
-        r"(?i)(hola|hi|buenos días|buenas tardes|buenas noches|saludos)": "¡Hola! Soy SIACASA, tu asistente bancario virtual. ¿En qué puedo ayudarte hoy?",
+        r"(?i)(hola|hi|buenos días|buenas tardes|buenas noches|saludos)": "¡Hola! Soy tu asistente virtual bancario. ¿En qué puedo ayudarte hoy?",
         r"(?i)(gracias|muchas gracias|thank you|thanks)": "¡De nada! ¿Hay algo más en lo que pueda ayudarte?",
         r"(?i)(adiós|chao|hasta luego|bye|goodbye)": "¡Hasta luego! Que tengas un excelente día. Recuerda que estoy aquí cuando me necesites.",
         r"(?i)(mi saldo|saldo actual|consultar saldo|ver mi saldo)": "Para consultar tu saldo necesito verificar tu identidad. ¿Podrías proporcionarme tu número de cuenta o DNI?"
     }
 
+    FALLBACK_KNOWLEDGE = {
+        "bn": [
+            {
+                "keywords": ["agencia", "agencias", "sucursal", "sucursales"],
+                "content": (
+                    "Agencias registradas Banco Nación (demo):\n"
+                    "- Agencia Miraflores (AG-MIRA), Av. José Pardo 123, frente al Parque Kennedy. "
+                    "Servicios: caja, atención preferencial, autogestión, cajeros 24h. Tel: (01) 600-1101.\n"
+                    "- Agencia San Isidro (AG-SI), Av. Rivera Navarrete 845, cruce con Javier Prado. "
+                    "Servicios corporativos y ventanilla rápida.\n"
+                    "- Agencia Arequipa Centro (AG-AQP), Calle Mercaderes 512, a media cuadra de la Plaza de Armas. "
+                    "Atención integral y módulo de asesoría.\n"
+                    "Horarios: L-V 09:00-18:00, sábados 09:00-13:00. Domingos y feriados cerrados salvo feriados patrios 28-29/07 (10:00-13:00)."
+                )
+            },
+            {
+                "keywords": ["qué banco", "que banco", "qué banco eres", "que banco eres", "de qué banco", "banco eres", "eres un banco", "quién eres", "quien eres", "qué institución", "identidad"],
+                "content": (
+                    "Soy el asistente virtual institucional del Banco de la Nación (versión demo para pruebas). "
+                    "Estoy diseñado para orientar a los clientes sobre horarios, agencias, promociones y canales oficiales del banco. "
+                    "Si necesitas atención personalizada, puedo derivarte a nuestros agentes humanos en horario de oficina."
+                )
+            },
+            {
+                "keywords": ["horario", "horarios", "atienden", "abren"],
+                "content": (
+                    "Horario general Banco Nación (demo): lunes a viernes 09:00-18:00, sábados 09:00-13:00. "
+                    "Domingos cerrado. En feriados nacionales la atención presencial se suspende salvo 28 y 29 de julio (10:00-13:00 en agencias principales). "
+                    "Contact center y canales digitales operan 24/7."
+                )
+            },
+            {
+                "keywords": ["numero", "teléfono", "contacto", "llamar"],
+                "content": (
+                    "Teléfonos oficiales Banco Nación (demo): central (01) 600-3000, reclamos (01) 600-3030 opción 2, "
+                    "bloqueos 24/7 0-800-12345 o +51 1 600-2222 desde el exterior. WhatsApp verificado: +51 987 654 321."
+                )
+            }
+        ]
+    }
+
+    COMMON_WORDS = {
+        "hola", "buenos", "dias", "días", "tardes", "noches", "necesito", "quiero", "consulta",
+        "ayuda", "por", "favor", "puedo", "como", "donde", "que", "qué", "cuando", "cuándo",
+        "cuál", "cual", "cuanto", "cuánto", "transferencia", "saldo", "reclamo", "agencia",
+        "tarjeta", "bloquear", "promociones", "horario", "banco", "nacion", "nación", "credito",
+        "crédito", "prestamo", "préstamo", "telefono", "teléfono", "contacto", "ubicacion",
+        "ubicación", "agente", "humano", "ayudar", "servicio", "seguridad"
+    }
+
+    CLARIFICATION_PHRASES = [
+        "explicame", "explícame", "no entendí", "no entendi", "no entiendo", "no te entiendo",
+        "ayuda", "qué puedes hacer", "que puedes hacer"
+    ]
+
     def __init__(
-        self, repository: IRepository, sentimiento_analyzer, ai_provider=None, bank_config=None,
-        support_repository=None
+        self,
+        repository: IRepository,
+        sentimiento_analyzer,
+        ai_provider=None,
+        bank_config=None,
+        support_repository=None,
+        knowledge_service=None
     ):
         """
         Inicializa el servicio del chatbot.
@@ -49,6 +109,7 @@ class ChatbotService:
         self.sentimiento_analyzer = sentimiento_analyzer
         self.ai_provider = ai_provider
         self.support_repository = support_repository
+        self.knowledge_service = knowledge_service
 
         # Cache para optimizar rendimiento
         self._sentiment_cache = {}
@@ -57,9 +118,12 @@ class ChatbotService:
         self._max_cache_size = 100
 
         default_config = {
-            "bank_name": "Banco",
-            "greeting": "Hola, soy SIACASA, tu asistente bancario virtual.",
-            "style": "formal"
+            "bank_name": "Banco SIACASA",
+            "greeting": "Hola, soy tu asistente virtual bancario.",
+            "style": "formal",
+            "identity_statement": (
+                "Representas al banco SIACASA para resolver consultas sobre horarios, productos, canales y soporte."
+            )
         }
 
         self.escalation_service = None
@@ -71,19 +135,28 @@ class ChatbotService:
                 "Support repository not provided, escalation service not initialized")
 
         self.bank_config = {**default_config, **(bank_config or {})}
+        self.bank_config.setdefault("bank_code", "default")
+        self.bank_config.setdefault(
+            "identity_statement",
+            f"Representas al banco {self.bank_config['bank_name']} para resolver consultas oficiales."
+        )
+        self.bank_config.setdefault("greeting", "Hola, soy tu asistente virtual bancario. ¿En qué puedo ayudarte hoy?")
 
         # Mensaje de sistema optimizado
+        identidad = self.bank_config.get("identity_statement", "")
+        estilo = self.bank_config.get("style", "profesional")
         self.mensaje_sistema = Mensaje(
             role="system",
-            content=f"""Eres SIACASA, un asistente bancario virtual del {self.bank_config['bank_name']}. 
-            
-Características:
-- Responde de forma clara, concisa y profesional
-- Ayuda con consultas de saldo, transferencias, productos bancarios y dudas generales
-- Si no puedes resolver algo, ofrece escalación a un agente humano
-- Mantén el contexto de la conversación
-- No repitas saludos en cada respuesta
-- Usa lenguaje sencillo y evita jerga técnica"""
+            content=(
+                f"Eres el asistente virtual oficial del {self.bank_config['bank_name']}. {identidad}\n\n"
+                "Instrucciones de estilo:\n"
+                f"- Mantén un tono {estilo} y empático.\n"
+                "- Responde de forma clara, concisa y contextualizada al banco.\n"
+                "- Utiliza la base de conocimiento y evita inventar datos. Si falta información, acláralo y ofrece canales oficiales.\n"
+                "- Nunca digas que eres un modelo genérico de OpenAI ni que careces de afiliación bancaria.\n"
+                "- Si la consulta requiere intervención humana, ofrece derivar a un agente.\n"
+                "- No repitas saludos en cada mensaje y evita tecnicismos innecesarios."
+            )
         )
 
     def obtener_respuesta_rapida(self, texto: str) -> Optional[str]:
@@ -137,8 +210,13 @@ Características:
                 # Agregar mensaje del sistema
                 conversacion.agregar_mensaje(self.mensaje_sistema)
 
+                # Inicializar metadatos con bank_code predeterminado
+                self._ensure_conversation_bank_code(conversacion)
+
                 # Guardar la conversación
                 self.repository.guardar_conversacion(conversacion)
+            else:
+                self._ensure_conversation_bank_code(conversacion)
 
             # Agregar al cache (limitar tamaño)
             self._add_to_conversation_cache(usuario_id, conversacion)
@@ -163,6 +241,179 @@ Características:
             del self._conversation_cache[oldest_key]
 
         self._conversation_cache[usuario_id] = conversacion
+
+    def _ensure_conversation_bank_code(self, conversacion: Conversacion) -> None:
+        """Garantiza que la conversación tenga un bank_code en su metadata."""
+        try:
+            if not conversacion:
+                return
+            if not hasattr(conversacion, "metadata") or conversacion.metadata is None:
+                conversacion.metadata = {}
+            if not conversacion.metadata.get("bank_code"):
+                conversacion.metadata["bank_code"] = self.bank_config.get("bank_code", "default")
+        except Exception as e:
+            logger.debug(f"No se pudo actualizar el bank_code en la conversación: {e}")
+
+    def _resolve_bank_code(self, conversacion: Conversacion) -> str:
+        """Obtiene el código de banco asociado a la conversación."""
+        try:
+            if conversacion and getattr(conversacion, "metadata", None):
+                bank_code = conversacion.metadata.get("bank_code")
+                if bank_code:
+                    return str(bank_code).lower()
+        except Exception as e:
+            logger.debug(f"No se pudo obtener bank_code de la conversación: {e}")
+        
+        return str(self.bank_config.get("bank_code", "default")).lower()
+
+    def _build_knowledge_instruction(self, query: str, bank_code: str) -> Optional[str]:
+        """Construye instrucciones adicionales con base en el contexto recuperado."""
+        if not self.knowledge_service:
+            return None
+
+        resultados = self.knowledge_service.retrieve_context(query, bank_code=bank_code)
+        if not resultados:
+            fallback_text = self._fallback_snippet(query, bank_code)
+            if not fallback_text:
+                return None
+            context_segments = [fallback_text]
+        else:
+            context_segments = []
+            for idx, item in enumerate(resultados, start=1):
+                snippet = (item.get("text") or "").strip()
+                snippet = re.sub(r"\s+", " ", snippet)
+                if len(snippet) > 450:
+                    snippet = snippet[:450].rstrip() + "..."
+                similarity = item.get("similarity", 0.0)
+                context_segments.append(f"[Fuente {idx} | similitud {similarity:.2f}] {snippet}")
+
+        identidad = self.bank_config.get("identity_statement")
+        if identidad:
+            context_segments.insert(0, f"[Perfil institucional] {identidad}")
+
+        instruction = (
+            "Base de conocimiento institucional. Utiliza únicamente estos datos para responder. "
+            "Si la información solicitada no aparece aquí, indica que no está disponible y ofrece canales oficiales.\n"
+            + "\n".join(context_segments)
+        )
+
+        return instruction
+
+    def _fallback_snippet(self, query: str, bank_code: str) -> Optional[str]:
+        """Busca un fragmento por coincidencia simple cuando no hay embeddings disponibles."""
+        bank_code = (bank_code or "default").lower()
+        entries = self.FALLBACK_KNOWLEDGE.get(bank_code, [])
+        if not entries:
+            return None
+
+        text = query.lower()
+        for entry in entries:
+            if any(keyword in text for keyword in entry.get("keywords", [])):
+                return f"[Fuente fallback | bancos demo] {entry.get('content')}"
+
+        return None
+
+    def _is_gibberish(self, texto: str) -> bool:
+        """Detecta entradas incoherentes o con poco contenido lingüístico."""
+        if not texto or not texto.strip():
+            return True
+
+        texto_normalizado = texto.lower()
+        tokens = re.findall(r"\b[\wáéíóúüñ]+\b", texto_normalizado)
+        if not tokens:
+            return True
+
+        known = sum(1 for token in tokens if token in self.COMMON_WORDS)
+        if known > 0:
+            return False
+
+        if len(tokens) <= 4 and all(len(t) <= 3 for t in tokens):
+            return True
+
+        alphabetic_ratio = sum(ch.isalpha() for ch in texto) / max(len(texto), 1)
+        if alphabetic_ratio < 0.4:
+            return True
+
+        return False
+
+    def _is_clarification_request(self, texto: str, conversacion: Conversacion) -> bool:
+        """Verifica si el usuario pide aclaración tras un mensaje no entendido."""
+        if not conversacion or not hasattr(conversacion, "metadata"):
+            return False
+
+        last_interaction = conversacion.metadata.get("last_interaction_type")
+        if last_interaction != "gibberish":
+            return False
+
+        texto_lower = texto.lower()
+        return any(frase in texto_lower for frase in self.CLARIFICATION_PHRASES)
+
+    def _handle_gibberish_input(self, conversacion: Conversacion, usuario_id: str, texto: str) -> str:
+        """Responde con mensaje de no comprensión y sugiere reformulación."""
+        full_response = "Lo siento, no entendí tu consulta."
+
+        mensaje_usuario = Mensaje(role="user", content=texto)
+        mensaje_usuario.id = str(uuid.uuid4())
+        mensaje_usuario.timestamp = datetime.now()
+        mensaje_usuario.metadata = {"interaction": "gibberish_input"}
+
+        if getattr(conversacion, 'metadata', None) is None:
+            conversacion.metadata = {}
+
+        conversacion.agregar_mensaje(mensaje_usuario)
+        if hasattr(self.repository, '_guardar_mensaje'):
+            self.repository._guardar_mensaje(conversacion.id, mensaje_usuario)
+
+        mensaje_bot = Mensaje(role="assistant", content=full_response)
+        mensaje_bot.id = str(uuid.uuid4())
+        mensaje_bot.timestamp = datetime.now()
+        mensaje_bot.metadata = {"interaction": "gibberish_response"}
+
+        conversacion.agregar_mensaje(mensaje_bot)
+        if hasattr(self.repository, '_guardar_mensaje'):
+            self.repository._guardar_mensaje(conversacion.id, mensaje_bot)
+
+        conversacion.metadata["last_interaction_type"] = "gibberish"
+
+        self.repository.guardar_conversacion(conversacion)
+        self._conversation_cache[usuario_id] = conversacion
+
+        return full_response
+
+    def _handle_clarification_request(self, conversacion: Conversacion, usuario_id: str, texto: str) -> str:
+        """Responde con ejemplos concretos tras un pedido de aclaración."""
+        respuesta = (
+            "Puedes consultarme horarios de atención, estados de reclamos, "
+            "ubicación de agencias o cómo bloquear tu tarjeta. ¿Sobre qué tema necesitas ayuda?"
+        )
+
+        mensaje_usuario = Mensaje(role="user", content=texto)
+        mensaje_usuario.id = str(uuid.uuid4())
+        mensaje_usuario.timestamp = datetime.now()
+        mensaje_usuario.metadata = {"interaction": "clarification_request"}
+
+        if getattr(conversacion, 'metadata', None) is None:
+            conversacion.metadata = {}
+
+        conversacion.agregar_mensaje(mensaje_usuario)
+        if hasattr(self.repository, '_guardar_mensaje'):
+            self.repository._guardar_mensaje(conversacion.id, mensaje_usuario)
+
+        mensaje_bot = Mensaje(role="assistant", content=respuesta)
+        mensaje_bot.id = str(uuid.uuid4())
+        mensaje_bot.timestamp = datetime.now()
+        mensaje_bot.metadata = {"interaction": "clarification_response"}
+
+        conversacion.agregar_mensaje(mensaje_bot)
+        if hasattr(self.repository, '_guardar_mensaje'):
+            self.repository._guardar_mensaje(conversacion.id, mensaje_bot)
+
+        conversacion.metadata["last_interaction_type"] = "clarification_provided"
+
+        self.repository.guardar_conversacion(conversacion)
+        self._conversation_cache[usuario_id] = conversacion
+
+        return respuesta
 
     def agregar_mensaje_usuario(self, usuario_id: str, texto: str) -> Mensaje:
         """
@@ -313,6 +564,12 @@ Características:
         try:
             # 1. Obtener o crear conversación
             conversacion = self.obtener_o_crear_conversacion(usuario_id)
+
+            if self._is_clarification_request(texto_mensaje, conversacion):
+                return self._handle_clarification_request(conversacion, usuario_id, texto_mensaje)
+
+            if self._is_gibberish(texto_mensaje):
+                return self._handle_gibberish_input(conversacion, usuario_id, texto_mensaje)
             
             # 2. Analizar sentimiento completo del mensaje del usuario
             # Si ai_provider tiene análisis de sentimiento, usarlo
@@ -377,10 +634,23 @@ Características:
             
             # 6. Generar respuesta de la IA
             historial_mensajes = conversacion.obtener_historial()
+
+            knowledge_instruction = None
+            if self.knowledge_service:
+                try:
+                    bank_code = self._resolve_bank_code(conversacion)
+                    knowledge_instruction = self._build_knowledge_instruction(texto_mensaje, bank_code)
+                    if knowledge_instruction:
+                        logger.debug(f"Contexto enriquecido aplicado para bank_code={bank_code}")
+                except Exception as knowledge_error:
+                    logger.warning(f"Error obteniendo contexto enriquecido: {knowledge_error}", exc_info=True)
             
             # Medir tiempo específico de IA
             ai_start_time = time.perf_counter()
-            respuesta_ia = self.ai_provider.generar_respuesta(historial_mensajes)
+            respuesta_ia = self.ai_provider.generar_respuesta(
+                historial_mensajes,
+                instrucciones_adicionales=knowledge_instruction
+            )
             ai_end_time = time.perf_counter()
             ai_processing_time_ms = (ai_end_time - ai_start_time) * 1000
             
